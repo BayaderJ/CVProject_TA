@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professional Photo Enhancement</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+
+    .step {
+      display: none;
+      animation: fadeIn 0.5s;
+    }
+
+    .step.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin: 20px 0;
+    }
+
+    .option-card {
+      border: 3px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .option-card:hover {
+      border-color: #667eea;
+      transform: translateY(-5px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .option-card.selected {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+
+    .option-card h3 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .option-card p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .color-options {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 20px 0;
+    }
+
+    .color-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid #e0e0e0;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+
+    .color-btn:hover {
+      transform: scale(1.1);
+    }
+
+    .color-btn.selected {
+      border-color: #667eea;
+      border-width: 4px;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+    }
+
+    .color-btn.white { background: white; color: #333; }
+    .color-btn.black { background: black; color: white; }
+    .color-btn.grey { background: grey; color: white; }
+
+    .upload-section {
+      margin: 30px 0;
+      text-align: center;
+    }
+
+    .upload-options {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .upload-btn, .btn {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+
+    .upload-btn {
+      background: #667eea;
+      color: white;
+    }
+
+    .upload-btn:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    #videoContainer {
+      display: none;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    #video {
+      max-width: 100%;
+      border-radius: 10px;
+      border: 2px solid #e0e0e0;
+    }
+
+    .preview-section {
+      margin: 30px 0;
+      text-align: center;
+    }
+
+    .preview-section img {
+      max-width: 100%;
+      border-radius: 10px;
+      border: 2px solid #e0e0e0;
+      margin-top: 20px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      display: none;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 30px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .info-box {
+      background: #f0f4ff;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+    }
+
+    .info-box p {
+      color: #555;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📸 Professional Photo Enhancement</h1>
+
+    <!-- Step 1: Choose Photo Type -->
+    <div id="step1" class="step active">
+      <h2 style="text-align: center; margin-bottom: 20px;">Choose Photo Type</h2>
+      <div class="option-grid">
+        <div class="option-card" data-type="professional">
+          <h3>👔 Professional Photo</h3>
+          <p>LinkedIn, Resume, Employee Card</p>
+          <p style="margin-top: 10px; font-size: 12px;">Choose your background color</p>
+        </div>
+        <div class="option-card" data-type="saudi_id">
+          <h3>🆔 Saudi ID Photo</h3>
+          <p>Official ID Document</p>
+          <p style="margin-top: 10px; font-size: 12px;">White background (standard)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Choose Background Color (only for professional) -->
+    <div id="step2" class="step">
+      <h2 style="text-align: center; margin-bottom: 20px;">Choose Background Color</h2>
+      <div class="info-box">
+        <p>Select the background color for your professional photo</p>
+      </div>
+      <div class="color-options">
+        <div class="color-btn white" data-color="white">White</div>
+        <div class="color-btn black" data-color="black">Black</div>
+        <div class="color-btn grey" data-color="grey">Grey</div>
+      </div>
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+        <button class="btn upload-btn" onclick="goToStep(3)" id="colorNextBtn" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Upload or Capture Photo -->
+    <div id="step3" class="step">
+      <h2 style="text-align: center; margin-bottom: 20px;">Upload or Capture Photo</h2>
+      <div class="info-box">
+        <p id="selectedOptionsInfo"></p>
+      </div>
+      <div class="upload-section">
+        <div class="upload-options">
+          <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            📁 Upload Photo
+          </button>
+          <button class="upload-btn" onclick="startCamera()">
+            📷 Take Photo
+          </button>
+        </div>
+        <input type="file" id="fileInput" accept="image/*">
+      </div>
+
+      <!-- Camera Section -->
+      <div id="videoContainer">
+        <video id="video" autoplay></video>
+        <br>
+        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;">📸 Capture</button>
+        <button class="btn btn-secondary" onclick="stopCamera()" style="margin-top: 10px;">✖ Cancel</button>
+      </div>
+
+      <!-- Preview Section -->
+      <div id="previewSection" class="preview-section hidden">
+        <h3>Preview:</h3>
+        <img id="previewImg" alt="Preview">
+        <br>
+        <button class="upload-btn" onclick="processPhoto()" style="margin-top: 20px;">✨ Enhance Photo</button>
+      </div>
+
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" onclick="goBack()">← Back</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Processing & Result -->
+    <div id="step4" class="step">
+      <div class="loading active" id="loadingDiv">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px;">Processing your photo...</p>
+        <p style="font-size: 14px; color: #666; margin-top: 10px;">Applying face restoration and background enhancement</p>
+      </div>
+
+      <div id="resultSection" class="preview-section hidden">
+        <h2 style="text-align: center; margin-bottom: 20px;">✅ Enhanced Result</h2>
+        <img id="resultImg" alt="Result">
+        <div style="margin-top: 20px;">
+          <button class="upload-btn" onclick="downloadImage()">⬇ Download</button>
+          <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;">🔄 Start Over</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let photoType = '';
+    let backgroundColor = '';
+    let capturedFile = null;
+    let stream = null;
+
+    // Step 1: Choose photo type
+    document.querySelectorAll('.option-card').forEach(card => {
+      card.addEventListener('click', function() {
+        document.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+        this.classList.add('selected');
+        photoType = this.dataset.type;
+        
+        // If Saudi ID, skip color selection
+        if (photoType === 'saudi_id') {
+          backgroundColor = 'white';
+          goToStep(3);
+        } else {
+          goToStep(2);
+        }
+      });
+    });
+
+    // Step 2: Choose background color
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+        this.classList.add('selected');
+        backgroundColor = this.dataset.color;
+        document.getElementById('colorNextBtn').disabled = false;
+      });
+    });
+
+    // File input change
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      if (e.target.files.length > 0) {
+        capturedFile = e.target.files[0];
+        showPreview(capturedFile);
+      }
+    });
+
+    function goToStep(stepNum) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById('step' + stepNum).classList.add('active');
+      
+      if (stepNum === 3) {
+        updateSelectedOptionsInfo();
+      }
+    }
+
+    function goBack() {
+      if (photoType === 'saudi_id') {
+        goToStep(1);
+      } else {
+        goToStep(2);
+      }
+    }
+
+    function updateSelectedOptionsInfo() {
+      const info = `Photo Type: ${photoType === 'professional' ? 'Professional Photo' : 'Saudi ID'} | Background: ${backgroundColor.charAt(0).toUpperCase() + backgroundColor.slice(1)}`;
+      document.getElementById('selectedOptionsInfo').textContent = info;
+    }
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        const video = document.getElementById('video');
+        video.srcObject = stream;
+        document.getElementById('videoContainer').style.display = 'block';
+      } catch (err) {
+        alert('Could not access camera: ' + err.message);
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      document.getElementById('videoContainer').style.display = 'none';
+    }
+
+    function capturePhoto() {
+      const video = document.getElementById('video');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      
+      canvas.toBlob(blob => {
+        capturedFile = new File([blob], 'captured.jpg', { type: 'image/jpeg' });
+        showPreview(capturedFile);
+        stopCamera();
+      }, 'image/jpeg');
+    }
+
+    function showPreview(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('previewImg').src = e.target.result;
+        document.getElementById('previewSection').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function processPhoto() {
+      if (!capturedFile) {
+        alert('Please select or capture a photo first');
+        return;
+      }
+
+      goToStep(4);
+      
+      const formData = new FormData();
+      formData.append('file', capturedFile);
+      formData.append('photo_type', photoType);
+      formData.append('background_color', backgroundColor);
+
+      try {
+        const response = await fetch('/api/process', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Processing failed');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        
+        document.getElementById('loadingDiv').classList.remove('active');
+        document.getElementById('resultImg').src = url;
+        document.getElementById('resultSection').classList.remove('hidden');
+      } catch (error) {
+        alert('Error: ' + error.message);
+        goToStep(3);
+      }
+    }
+
+    function downloadImage() {
+      const img = document.getElementById('resultImg');
+      const link = document.createElement('a');
+      link.href = img.src;
+      link.download = `enhanced_${photoType}_photo.png`;
+      link.click();
+    }
+
+    function startOver() {
+      photoType = '';
+      backgroundColor = '';
+      capturedFile = null;
+      document.getElementById('fileInput').value = '';
+      document.getElementById('previewSection').classList.add('hidden');
+      document.getElementById('resultSection').classList.add('hidden');
+      document.getElementById('loadingDiv').classList.add('active');
+      document.querySelectorAll('.option-card, .color-btn').forEach(el => el.classList.remove('selected'));
+      goToStep(1);
+    }
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,20 @@
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# GFPGAN Models
+experiments/pretrained_models/*.pth
+experiments/pretrained_models/*.pt"experiments/pretrained_models/*.pth" 
+"gfpgan/weights/*.pth" 

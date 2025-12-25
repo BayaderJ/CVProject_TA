@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+gfpgan
+basicsr
+facexlib
+realesrgan
+opencv-python-headless
+numpy
