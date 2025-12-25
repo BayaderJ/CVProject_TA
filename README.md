@@ -1,12 +1,18 @@
 To run the project:
-# Clone the repo
-git clone https://github.com/BayaderJ/CVProject_TA.git
-cd CVProject_TA
+1. Clone the repo
+   
+    git clone https://github.com/BayaderJ/CVProject_TA.git
 
-# Create venv and install dependencies
-python -m venv venv
-venv\Scripts\activate 
-pip install -r requirements.txt
+    cd CVProject_TA
 
-# Run the app (model auto-downloads)
-uvicorn app.main:app --reload
+2. Create venv and install dependencies
+   
+    python -m venv venv
+
+    venv\Scripts\activate 
+
+    pip install -r requirements.txt
+
+3. Run the app (model auto-downloads)
+   
+    uvicorn app.main:app --reload
