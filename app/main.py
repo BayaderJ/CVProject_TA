@@ -1,16 +1,39 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
 import io
+import math
+import os
 from enum import Enum
+from typing import Dict, Tuple, Optional
 
 from .gfpgan_service import create_restorer
+from .id_validation_service import get_validator
+from .background_removal_service import get_background_remover
+
+
+def convert_to_json_serializable(obj):
+    """Convert NumPy types to Python native types for JSON serialization"""
+    if isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_json_serializable(item) for item in obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
 
 app = FastAPI()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,11 +43,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount the static folder
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Create the GFPGAN model once at startup
+print("[STARTUP] Loading models...")
 restorer = create_restorer()
+validator = get_validator()
+bg_remover = get_background_remover()
+print("[STARTUP] All models loaded successfully")
+
+MIN_ROTATE = 2.0
+MAX_AUTO_ROTATE = 20
+
+SAUDI_ID_WIDTH_MM = 40
+SAUDI_ID_HEIGHT_MM = 60
+SAUDI_ID_DPI = 300
+
+SAUDI_ID_WIDTH_PX = 480
+SAUDI_ID_HEIGHT_PX = 640
+
+FACE_SIZE_MIN = 0.70
+FACE_SIZE_MAX = 0.80
+
+JPEG_QUALITY = 95
+
+
+def preprocess_for_detection(img: np.ndarray) -> np.ndarray:
+    """Preprocess image for better face detection"""
+    if img.dtype != np.uint8:
+        if img.max() <= 1.0:
+            img = (img * 255).astype(np.uint8)
+        else:
+            img = img.astype(np.uint8)
+    
+    h, w = img.shape[:2]
+    print(f"[PREPROCESS] Original size: {w}x{h}")
+    
+    max_dim = 1920
+    if max(h, w) > max_dim:
+        scale = max_dim / max(h, w)
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        print(f"[PREPROCESS] Resized to: {new_w}x{new_h}")
+    
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    mean_brightness = gray.mean()
+    print(f"[PREPROCESS] Brightness: {mean_brightness:.1f}/255")
+    
+    if mean_brightness < 80:
+        img = cv2.convertScaleAbs(img, alpha=1.2, beta=30)
+        print(f"[PREPROCESS] Enhanced brightness (was too dark)")
+    elif mean_brightness > 200:
+        img = cv2.convertScaleAbs(img, alpha=0.9, beta=-20)
+        print(f"[PREPROCESS] Reduced brightness (was too bright)")
+    
+    return img
+
 
 class PhotoType(str, Enum):
     PROFESSIONAL = "professional"
@@ -35,412 +109,721 @@ class BackgroundColor(str, Enum):
     BLACK = "black"
     GREY = "grey"
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
 
+
 @app.post("/api/process")
 async def process_photo(
     file: UploadFile = File(...),
     photo_type: str = Form(...),
-    background_color: str = Form(None)
+    background_color: str = Form(None),
+    background_index: int = Form(None),
+    gender: str = Form(None)
 ):
     """
     Main processing endpoint with separate pipelines for each photo type
+    
+    Args:
+        file: Image file
+        photo_type: "professional" or "saudi_id"
+        background_color: "white", "black", "grey" (for solid colors)
+        background_index: Index of background image from backgrounds/ folder (optional)
+        gender: "male" or "female" (required for saudi_id)
     """
-    
-    # Validate inputs
     if photo_type not in ["professional", "saudi_id"]:
-        return {"error": "Invalid photo type"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid photo type"}
+        )
     
-    # For Saudi ID, background must be white
     if photo_type == "saudi_id":
         background_color = "white"
-    elif photo_type == "professional" and background_color not in ["white", "black", "grey"]:
-        return {"error": "Invalid background color for professional photo"}
+        background_index = None
+        if not gender or gender.lower() not in ["male", "female"]:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Gender (male/female) is required for Saudi ID photos"}
+            )
+    elif photo_type == "professional":
+        if background_index is None and background_color not in ["white", "black", "grey", None]:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid background color for professional photo"}
+            )
     
-    # Read and decode image
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
     if img is None:
-        return {"error": "Invalid image"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image"}
+        )
     
-    # STEP 1: Face Restoration (Same for both photo types - GFPGAN model)
-    try:
-        restored_img = apply_gfpgan_restoration(img)
-    except Exception as e:
-        return {"error": f"Face restoration failed: {str(e)}"}
-    
-    # STEP 2 & 3: Route to appropriate pipeline based on photo type
     try:
         if photo_type == "saudi_id":
-            # Saudi ID Pipeline - Different measurements and specs
-            final_img = process_saudi_id_pipeline(restored_img, background_color)
-        else:  # professional
-            # Professional Photo Pipeline - Standard processing
-            final_img = process_professional_pipeline(restored_img, background_color)
+            result = await process_saudi_id_photo(img, gender.lower())
+        else:
+            result = await process_professional_photo(img, background_color, background_index)
+        
+        return result
+        
     except Exception as e:
-        return {"error": f"Processing failed: {str(e)}"}
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Processing failed: {str(e)}"}
+        )
+
+
+async def process_professional_photo(img: np.ndarray, color: str = None, bg_index: int = None):
+    """Professional photo pipeline: GFPGAN → Background Removal → Background Replacement"""
+    print(f"[PROFESSIONAL] Starting pipeline...")
+    print(f"[PROFESSIONAL] Input: shape={img.shape}, dtype={img.dtype}")
     
-    # Encode final result to PNG bytes
-    ok, encoded = cv2.imencode(".png", final_img)
+    try:
+        print("[PROFESSIONAL] Step 1: Face restoration...")
+        restored_img = apply_gfpgan_restoration(img)
+        print(f"[PROFESSIONAL] Face restoration complete: shape={restored_img.shape}")
+    except Exception as e:
+        print(f"[PROFESSIONAL] Face restoration failed: {e}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Face restoration failed: {str(e)}"}
+        )
+    
+    try:
+        print("[PROFESSIONAL] Step 2: Background removal and replacement...")
+        if bg_index is not None:
+            result_img = bg_remover.remove_and_replace(
+                restored_img,
+                bg_index=bg_index,
+                use_professional_composite=True
+            )
+        else:
+            bg_color_tuple = get_bg_color(color if color else "white")
+            print(f"[PROFESSIONAL] Using background color: {color} -> BGR{bg_color_tuple}")
+            result_img = bg_remover.remove_and_replace(
+                restored_img,
+                bg_color=bg_color_tuple,
+                use_professional_composite=True
+            )
+        print(f"[PROFESSIONAL] Background replacement complete: shape={result_img.shape}")
+    except Exception as e:
+        print(f"[PROFESSIONAL] Background replacement failed: {e}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Background replacement failed: {str(e)}"}
+        )
+    
+    print("[PROFESSIONAL] Step 3: Encoding final image as JPEG...")
+    ok, encoded = cv2.imencode(".jpg", result_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     if not ok:
-        return {"error": "Image encoding failed"}
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Image encoding failed"}
+        )
+    
+    print(f"[PROFESSIONAL] ✅ Pipeline complete! Output size: {len(encoded.tobytes())} bytes")
     
     return StreamingResponse(
         io.BytesIO(encoded.tobytes()),
-        media_type="image/png",
+        media_type="image/jpeg",
+        headers={
+            "Content-Disposition": "inline; filename=professional_photo.jpg"
+        }
     )
 
 
-# ============================================================================
-# STEP 1: GFPGAN FACE RESTORATION
-# ============================================================================
+async def process_saudi_id_photo(img: np.ndarray, gender: str):
+    """
+    Complete Saudi ID pipeline with all validations:
+    
+    1. Glasses detection (warning only - high false positive rate)
+    2. Hijab/Ghutra detection (blocking - required)
+    3. Face detection and positioning
+    4. Head alignment correction
+    5. Background removal and replacement (white)
+    6. Resize to Saudi ID specifications (40×60mm at 300 DPI)
+    
+    Note: GFPGAN face restoration is DISABLED for Saudi ID to preserve original quality
+    """
+    errors = []
+    warnings = []
+    
+    print(f"[SAUDI ID] Received image: shape={img.shape}, dtype={img.dtype}")
+    
+    if img is None or img.size == 0:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid or empty image"}
+        )
+    
+    h, w = img.shape[:2]
+    if h < 200 or w < 200:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": f"Image too small ({w}x{h} pixels). Minimum size: 200x200 pixels. "
+                "Please upload a higher resolution image."
+            }
+        )
+    
+    print(f"[SAUDI ID] Preprocessing image for face detection...")
+    img = preprocess_for_detection(img)
+    print(f"[SAUDI ID] After preprocessing: shape={img.shape}, dtype={img.dtype}")
+    
+    print(f"[SAUDI ID] Starting validation for {gender} photo...")
+    
+    validation_result = validator.validate_photo(img, gender)
+    validation_result = convert_to_json_serializable(validation_result)
+    
+    if not validation_result['valid']:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Photo validation failed",
+                "validation": {
+                    "passed": False,
+                    "errors": validation_result['errors'],
+                    "warnings": validation_result['warnings'],
+                    "details": validation_result['details']
+                }
+            }
+        )
+    
+    warnings.extend(validation_result['warnings'])
+    
+    print(f"[SAUDI ID] Validation passed")
+    print(f"  - Glasses prob: {validation_result['details']['glasses_prob']:.2%}")
+    print(f"  - {validation_result['details']['headcover_type']} prob: {validation_result['details']['headcover_prob']:.2%}")
+    
+    landmarks = validation_result['details'].get('landmarks')
+    head_tilt = validation_result['details'].get('head_tilt', 0)
+    face_bbox = validation_result['details'].get('facial_area')
+    
+    if landmarks is None or face_bbox is None:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Could not detect face landmarks for processing",
+                "validation": validation_result
+            }
+        )
+    
+    print(f"[SAUDI ID] Aligning face (tilt: {head_tilt:.2f}°)...")
+    
+    try:
+        aligned_img, final_landmarks = align_face_if_needed(img, landmarks, head_tilt)
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": str(e),
+                "validation": validation_result
+            }
+        )
+    except Exception as e:
+        print(f"[WARNING] Alignment failed: {e}, continuing without alignment")
+        aligned_img = img
+        final_landmarks = landmarks
+    
+    print("[SAUDI ID] Skipping face restoration (preserving original quality)...")
+    restored_img = aligned_img
+    
+    print("[SAUDI ID] Removing background...")
+    
+    try:
+        img_with_new_bg = bg_remover.remove_and_replace(
+            restored_img,
+            bg_color=(255, 255, 255),
+            use_professional_composite=True
+        )
+    except Exception as e:
+        print(f"[WARNING] Background removal failed: {e}, using original")
+        img_with_new_bg = restored_img
+        warnings.append(
+            "Background removal failed - using original background. "
+            "Please ensure photo has a plain background."
+        )
+    
+    print(f"[SAUDI ID] Resizing to Saudi ID specifications ({SAUDI_ID_WIDTH_MM}×{SAUDI_ID_HEIGHT_MM}mm at {SAUDI_ID_DPI} DPI)...")
+    
+    final_img = resize_to_saudi_id_specs(img_with_new_bg)
+    
+    ok, encoded = cv2.imencode(".jpg", final_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+    if not ok:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Image encoding failed"}
+        )
+    
+    response_headers = {
+        "Content-Disposition": "inline; filename=saudi_id_photo.jpg"
+    }
+    if warnings:
+        import json
+        response_headers["X-Validation-Warnings"] = json.dumps(warnings)
+    
+    print(f"[SAUDI ID] ✅ Processing complete!")
+    print(f"  - Final size: {final_img.shape[1]}×{final_img.shape[0]} pixels")
+    print(f"  - Warnings: {len(warnings)}")
+    
+    return StreamingResponse(
+        io.BytesIO(encoded.tobytes()),
+        media_type="image/jpeg",
+        headers=response_headers
+    )
 
-def apply_gfpgan_restoration(img: np.ndarray) -> np.ndarray:
+
+def resize_to_saudi_id_specs(img: np.ndarray) -> np.ndarray:
     """
-    Apply GFPGAN face restoration
-    This is YOUR implementation - works the same for both photo types
-    
-    Args:
-        img: BGR image from OpenCV
-    
-    Returns:
-        Restored BGR image
+    Resize to 480x640 canvas while preserving face aspect ratio.
+    Scales uniformly, centers image, pads with white background.
     """
-    _, _, restored_img = restorer.enhance(
+    if img is None:
+        raise ValueError("Input image is None")
+    if not isinstance(img, np.ndarray):
+        raise TypeError(f"Expected np.ndarray, got {type(img)}")
+    if len(img.shape) != 3:
+        raise ValueError(f"Expected 3D image, got shape {img.shape}")
+    if img.dtype != np.uint8:
+        raise TypeError(f"Expected uint8 dtype, got {img.dtype}")
+
+    target_w = 480
+    target_h = 640
+
+    h, w = img.shape[:2]
+    print(f"[RESIZE] Input: {w}x{h}")
+
+    scale = min(target_w / w, target_h / h)
+    new_w = int(round(w * scale))
+    new_h = int(round(h * scale))
+
+    resized = cv2.resize(
         img,
-        has_aligned=False,
-        only_center_face=False,
-        paste_back=True,
-        weight=0.5,
+        (new_w, new_h),
+        interpolation=cv2.INTER_LANCZOS4
     )
-    
-    if restored_img is None:
-        raise ValueError("No face detected in image")
-    
-    return restored_img
+
+    canvas = np.full((target_h, target_w, 3), 255, dtype=np.uint8)
+    x_offset = (target_w - new_w) // 2
+    y_offset = (target_h - new_h) // 2
+    canvas[y_offset:y_offset + new_h, x_offset:x_offset + new_w] = resized
+
+    adjusted = cv2.convertScaleAbs(canvas, alpha=1.05, beta=5)
+
+    print(f"[RESIZE] Output: {target_w}x{target_h} (aspect ratio preserved)")
+    return adjusted
 
 
-# ============================================================================
-# PROFESSIONAL PHOTO PIPELINE
-# ============================================================================
-
-def process_professional_pipeline(img: np.ndarray, color: str) -> np.ndarray:
-    """
-    Complete pipeline for PROFESSIONAL photos (LinkedIn, Resume, etc.)
-    
-    Pipeline: GFPGAN → Background Removal → Background Replacement
-    
-    Args:
-        img: BGR image after GFPGAN restoration
-        color: Background color ('white', 'black', or 'grey')
-    
-    Returns:
-        Final BGR image ready for download
-    """
-    print(f"[PROFESSIONAL PIPELINE] Processing with {color} background")
-    
-    # Step 2: Remove background
-    img_no_bg = remove_background_professional(img)
-    
-    # Step 3: Replace background
-    final_img = replace_background_professional(img_no_bg, color)
-    
-    return final_img
-
-
-def remove_background_professional(img: np.ndarray) -> np.ndarray:
-    """
-    STEP 2 (Professional): Remove background from professional photo
-    
-    PLACEHOLDER to implement
-    Professional photos have more flexible requirements
-    
-    Args:
-        img: BGR image (from GFPGAN)
-        Shape: (height, width, 3)
-    
-    Returns:
-        BGRA image (with alpha channel for transparency)
-        Shape: (height, width, 4)
-        Alpha: 0 = background (transparent), 255 = person (opaque)
-    
-    TODO: Replace with actual background removal model
-    Examples: rembg, U2-Net, DeepLabV3, etc.
-    """
-    print("[PLACEHOLDER - PROFESSIONAL] Background removal")
-    
-    # TODO: Implement your background removal model here
-    # Example with rembg:
-    # from rembg import remove
-    # img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    # output = remove(img_rgb)
-    # return cv2.cvtColor(output, cv2.COLOR_RGBA2BGRA)
-    
-    # Temporary placeholder: add alpha channel (fully opaque)
-    if img.shape[2] == 3:
-        alpha = np.ones((img.shape[0], img.shape[1], 1), dtype=img.dtype) * 255
-        img_with_alpha = np.concatenate([img, alpha], axis=2)
-        return img_with_alpha
-    
-    return img
-
-
-def replace_background_professional(img: np.ndarray, color: str) -> np.ndarray:
-    """
-    STEP 3 (Professional): Replace background for professional photo
-    
-    PLACEHOLDER to implement
-    Professional photos: standard background replacement
-    
-    Args:
-        img: BGRA image (with alpha channel)
-        Shape: (height, width, 4)
-        color: 'white', 'black', or 'grey'
-    
-    Returns:
-        BGR image with new background
-        Shape: (height, width, 3)
-    
-    TODO: Replace with actual background replacement logic
-    Can add edge refinement, color correction, etc.
-    """
-    print(f"[PLACEHOLDER - PROFESSIONAL] Background replacement with {color}")
-    
-    # Color mapping (BGR format for OpenCV)
+def get_bg_color(color_name: str) -> Tuple[int, int, int]:
+    """Convert color name to BGR tuple"""
     color_map = {
         "white": (255, 255, 255),
         "black": (0, 0, 0),
         "grey": (128, 128, 128)
     }
-    
-    bg_color = color_map.get(color, (255, 255, 255))
-    
-    # TODO: Implement your background replacement here
-    # Can add edge feathering, color correction, etc.
-    
-    # Basic alpha blending (placeholder)
-    if img.shape[2] == 4:
-        background = np.full((img.shape[0], img.shape[1], 3), bg_color, dtype=np.uint8)
-        alpha = img[:, :, 3:4].astype(float) / 255.0
-        foreground = img[:, :, :3]
-        final_img = (foreground * alpha + background * (1 - alpha)).astype(np.uint8)
-        return final_img
-    
-    return img[:, :, :3] if img.shape[2] == 4 else img
+    return color_map.get(color_name, (255, 255, 255))
 
 
-# ============================================================================
-# SAUDI ID PIPELINE (Different measurements and specifications)
-# ============================================================================
-
-def process_saudi_id_pipeline(img: np.ndarray, color: str) -> np.ndarray:
+def align_face_if_needed(img_bgr: np.ndarray, landmarks: dict, angle_deg: float):
     """
-    Complete pipeline for SAUDI ID photos
-    
-    Pipeline: GFPGAN → Background Removal (ID specs) → Background Replacement (ID specs)
-    
-    Saudi ID has specific requirements:
-    - Specific dimensions (e.g., 4x6 cm or 413x531 pixels)
-    - Face must be centered and sized properly
-    - Specific contrast/brightness requirements
-    - Always white background
+    Align face if head tilt exceeds threshold
     
     Args:
-        img: BGR image after GFPGAN restoration
-        color: Always 'white' for Saudi ID
+        img_bgr: BGR image from OpenCV
+        landmarks: Dictionary with 'left_eye', 'right_eye', etc.
+        angle_deg: Pre-calculated head tilt angle
     
     Returns:
-        Final BGR image meeting Saudi ID specifications
+        (aligned_img, final_landmarks): Aligned image and updated landmarks
+    
+    Raises:
+        ValueError: If tilt is too large (> MAX_AUTO_ROTATE)
     """
-    print("[SAUDI ID PIPELINE] Processing with ID specifications")
+    left_eye = landmarks["left_eye"]
+    right_eye = landmarks["right_eye"]
     
-    # Step 2: Remove background (with ID specifications)
-    img_no_bg = remove_background_saudi_id(img)
+    if left_eye[0] > right_eye[0]:
+        left_eye, right_eye = right_eye, left_eye
     
-    # Step 3: Replace background and apply ID specifications
-    final_img = replace_background_saudi_id(img_no_bg, color)
+    abs_angle = abs(angle_deg)
     
-    return final_img
-
-
-def remove_background_saudi_id(img: np.ndarray) -> np.ndarray:
-    """
-    STEP 2 (Saudi ID): Remove background with ID photo specifications
+    h, w = img_bgr.shape[:2]
+    cx, cy = w // 2, h // 2
     
-    PLACEHOLDER to implement
-    Saudi ID requirements are more strict than professional photos:
-    - May need to detect and verify face position/size
-    - Ensure proper head-to-shoulder ratio
-    - Verify image meets ID standards before processing
+    if abs_angle < MIN_ROTATE:
+        print(f"[ALIGNMENT] No rotation needed (tilt: {abs_angle:.2f}°)")
+        return img_bgr, landmarks
     
-    Args:
-        img: BGR image (from GFPGAN)
-        Shape: (height, width, 3)
+    elif abs_angle > MAX_AUTO_ROTATE:
+        raise ValueError(
+            f"Head tilt is too large ({abs_angle:.1f}°). "
+            f"Maximum allowed: {MAX_AUTO_ROTATE}°. Please retake the photo with head straight."
+        )
     
-    Returns:
-        BGRA image (with alpha channel)
-        Shape: (height, width, 4)
-    
-    Saudi ID Specifications:
-    - Face should occupy 70-80% of image height
-    - Head must be centered
-    - Eyes should be at specific height (typically 2/3 from bottom)
-    - No smile, neutral expression (already handled by photo capture)
-    
-    TODO: Replace with background removal model + ID validation
-    """
-    print("[PLACEHOLDER - SAUDI ID] Background removal with ID specs")
-    
-    # TODO: Implement Saudi ID specific background removal
-    # 1. Verify face position and size meet ID requirements
-    # 2. Remove background with higher precision (ID photos need clean edges)
-    # 3. May need additional face detection to validate specs
-    
-    # Example structure:
-    # - Detect face landmarks
-    # - Verify face size ratio (head height / image height)
-    # - Verify face is centered
-    # - Remove background with stricter edge detection
-    # - Return BGRA with clean alpha mask
-    
-    # Temporary placeholder
-    if img.shape[2] == 3:
-        alpha = np.ones((img.shape[0], img.shape[1], 1), dtype=img.dtype) * 255
-        img_with_alpha = np.concatenate([img, alpha], axis=2)
-        return img_with_alpha
-    
-    return img
-
-
-def replace_background_saudi_id(img: np.ndarray, color: str) -> np.ndarray:
-    """
-    STEP 3 (Saudi ID): Replace background and apply ID specifications
-    
-    PLACEHOLDER to implement
-    Saudi ID has strict requirements that differ from professional photos
-    
-    Args:
-        img: BGRA image (with alpha channel)
-        Shape: (height, width, 4)
-        color: Always 'white' for Saudi ID
-    
-    Returns:
-        BGR image meeting Saudi ID specifications
-        Final dimensions: Typically 413x531 pixels (4x6 cm at 260 DPI)
-    
-    Saudi ID Specifications:
-    - Exact dimensions: 4cm x 6cm (413 x 531 pixels at 260 DPI)
-    - Background: Pure white (255, 255, 255)
-    - Face centered with proper margins
-    - Specific contrast and brightness levels
-    - High quality, sharp edges
-    
-    TODO: Replace with Saudi ID specification implementation
-    """
-    print("[PLACEHOLDER - SAUDI ID] Background replacement with ID specs")
-    
-    # Saudi ID standard dimensions
-    SAUDI_ID_WIDTH = 413   # 4 cm at 260 DPI
-    SAUDI_ID_HEIGHT = 531  # 6 cm at 260 DPI
-    
-    # TODO: Implement Saudi ID specific processing:
-    # 1. Replace background with pure white
-    # 2. Resize to exact Saudi ID dimensions (413x531)
-    # 3. Ensure face is properly centered
-    # 4. Apply contrast/brightness adjustments for ID photos
-    # 5. Ensure margins meet ID requirements
-    
-    # Color for Saudi ID (always white)
-    bg_color = (255, 255, 255)  # Pure white in BGR
-    
-    # Basic implementation (placeholder)
-    if img.shape[2] == 4:
-        # Create white background
-        background = np.full((img.shape[0], img.shape[1], 3), bg_color, dtype=np.uint8)
-        alpha = img[:, :, 3:4].astype(float) / 255.0
-        foreground = img[:, :, :3]
-        blended = (foreground * alpha + background * (1 - alpha)).astype(np.uint8)
+    else:
+        print(f"[ALIGNMENT] Rotating by {angle_deg:.2f}°...")
         
-        # TODO: Resize to Saudi ID dimensions
-        # final_img = cv2.resize(blended, (SAUDI_ID_WIDTH, SAUDI_ID_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
-        # TODO: Center face properly
-        # TODO: Apply ID-specific adjustments
+        M = cv2.getRotationMatrix2D((cx, cy), angle_deg, 1.0)
         
-        return blended
+        aligned = cv2.warpAffine(
+            img_bgr, M, (w, h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REPLICATE
+        )
+        
+        try:
+            from retinaface import RetinaFace
+            
+            faces = RetinaFace.detect_faces(aligned)
+            if not faces:
+                print("[WARNING] No face detected after alignment")
+                return aligned, landmarks
+            
+            best_key = max(faces.keys(), key=lambda k: faces[k].get("score", 0))
+            face = faces[best_key]
+            final_landmarks = face["landmarks"]
+            
+            print("[ALIGNMENT] Face re-detected after rotation")
+            return aligned, final_landmarks
+            
+        except Exception as e:
+            print(f"[WARNING] Could not re-detect face: {e}")
+            return aligned, landmarks
+
+
+def apply_gfpgan_restoration(img: np.ndarray) -> np.ndarray:
+    """Apply GFPGAN face restoration"""
+    if img is None:
+        raise ValueError("Input image is None")
+    if not isinstance(img, np.ndarray):
+        raise TypeError(f"Expected np.ndarray, got {type(img)}")
+    if len(img.shape) != 3:
+        raise ValueError(f"Expected 3D image, got shape {img.shape}")
+    if img.shape[2] != 3:
+        raise ValueError(f"Expected 3 channels (BGR), got {img.shape[2]}")
+    if img.dtype != np.uint8:
+        raise TypeError(f"Expected uint8 dtype, got {img.dtype}")
     
-    return img[:, :, :3] if img.shape[2] == 4 else img
+    print(f"[GFPGAN] Input: shape={img.shape}, dtype={img.dtype}")
+    
+    _, _, restored_img = restorer.enhance(
+        img,
+        has_aligned=False,
+        only_center_face=False,
+        paste_back=True,
+        weight=0.5
+    )
+    
+    if restored_img is None:
+        raise ValueError("No face detected in image")
+    
+    if restored_img.dtype != np.uint8:
+        restored_img = restored_img.astype(np.uint8)
+    
+    print(f"[GFPGAN] Output: shape={restored_img.shape}, dtype={restored_img.dtype}")
+    
+    return restored_img
 
 
-# ============================================================================
-# Test Endpoints for Individual Steps
-# ============================================================================
+@app.get("/api/backgrounds")
+async def list_backgrounds():
+    """List all available background images from backgrounds/ folder"""
+    bg_files = bg_remover.list_available_backgrounds()
+    
+    return {
+        "count": len(bg_files),
+        "backgrounds": [
+            {
+                "index": i,
+                "filename": os.path.basename(f),
+                "path": f
+            }
+            for i, f in enumerate(bg_files)
+        ]
+    }
+
+
+@app.post("/api/test-face-detection")
+async def test_face_detection(file: UploadFile = File(...)):
+    """Diagnostic endpoint to test face detection and provide detailed feedback"""
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    if img is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image - could not decode"}
+        )
+    
+    h, w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    brightness = float(gray.mean())
+    
+    diagnostics = {
+        "image_info": {
+            "width": w,
+            "height": h,
+            "shape": f"{w}x{h}",
+            "dtype": str(img.dtype),
+            "channels": img.shape[2] if len(img.shape) > 2 else 1,
+            "size_check": "OK" if min(h, w) >= 200 else f"TOO SMALL (min 200px, got {min(h,w)}px)"
+        },
+        "brightness": {
+            "mean": brightness,
+            "min": int(img.min()),
+            "max": int(img.max()),
+            "assessment": "OK" if 80 <= brightness <= 200 else ("TOO DARK" if brightness < 80 else "TOO BRIGHT")
+        }
+    }
+    
+    try:
+        from retinaface import RetinaFace
+        
+        print(f"[TEST] Attempting face detection on {w}x{h} image...")
+        faces = RetinaFace.detect_faces(img)
+        
+        if not faces:
+            diagnostics["detection_original"] = {
+                "result": "NO_FACE_DETECTED",
+                "suggestion": [
+                    "Ensure face is clearly visible and well-lit",
+                    "Face should occupy 30-60% of image width",
+                    "Try better lighting conditions",
+                    "Ensure image is not blurry",
+                    "Face should be looking towards camera (not profile)",
+                    "Try with image at least 640px wide"
+                ]
+            }
+        else:
+            diagnostics["detection_original"] = {
+                "result": "SUCCESS",
+                "num_faces": len(faces),
+                "faces": []
+            }
+            for key, face in faces.items():
+                face_info = {
+                    "confidence": float(face.get("score", 0)),
+                    "bbox": face["facial_area"],
+                    "landmarks_detected": list(face["landmarks"].keys())
+                }
+                diagnostics["detection_original"]["faces"].append(face_info)
+        
+        if not faces:
+            print("[TEST] Trying with preprocessing...")
+            preprocessed = preprocess_for_detection(img.copy())
+            faces_preprocessed = RetinaFace.detect_faces(preprocessed)
+            
+            if faces_preprocessed:
+                diagnostics["detection_preprocessed"] = {
+                    "result": "SUCCESS_AFTER_PREPROCESSING",
+                    "num_faces": len(faces_preprocessed),
+                    "message": "Face detected after preprocessing - image quality may be suboptimal"
+                }
+            else:
+                diagnostics["detection_preprocessed"] = {
+                    "result": "STILL_FAILED",
+                    "message": "No face detected even after preprocessing"
+                }
+        
+    except Exception as e:
+        diagnostics["detection_error"] = {
+            "error": str(e),
+            "type": type(e).__name__
+        }
+    
+    return JSONResponse(content=diagnostics)
+
+
+@app.post("/api/validate-only")
+async def validate_only(
+    file: UploadFile = File(...),
+    gender: str = Form(...)
+):
+    """Validation-only endpoint for Saudi ID photos"""
+    if gender.lower() not in ["male", "female"]:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Gender must be 'male' or 'female'"}
+        )
+    
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    if img is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image"}
+        )
+    
+    img = preprocess_for_detection(img)
+    
+    validation_result = validator.validate_photo(img, gender.lower())
+    validation_result = convert_to_json_serializable(validation_result)
+    
+    return {
+        "validation": {
+            "passed": validation_result['valid'],
+            "errors": validation_result['errors'],
+            "warnings": validation_result['warnings'],
+            "details": validation_result['details'],
+            "note": "Face size will be automatically adjusted during processing"
+        }
+    }
+
 
 @app.post("/api/restore-only")
 async def restore_only(file: UploadFile = File(...)):
-    """
-    Test endpoint for GFPGAN only (for your testing)
-    Tests Step 1 in isolation
-    """
+    """Test endpoint for GFPGAN only"""
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
     if img is None:
-        return {"error": "Invalid image"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image"}
+        )
     
-    restored_img = apply_gfpgan_restoration(img)
+    try:
+        restored_img = apply_gfpgan_restoration(img)
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Face restoration failed: {str(e)}"}
+        )
     
-    ok, encoded = cv2.imencode(".png", restored_img)
+    ok, encoded = cv2.imencode(".jpg", restored_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     if not ok:
-        return {"error": "Encoding failed"}
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Encoding failed"}
+        )
     
     return StreamingResponse(
         io.BytesIO(encoded.tobytes()),
-        media_type="image/png",
+        media_type="image/jpeg",
+        headers={
+            "Content-Disposition": "inline; filename=restored_photo.jpg"
+        }
     )
 
 
-@app.post("/api/test-professional")
-async def test_professional_pipeline(file: UploadFile = File(...), background_color: str = Form("white")):
-    """
-    Test endpoint for complete professional pipeline
-    Useful for testing
-    """
+@app.post("/api/test-alignment")
+async def test_alignment(file: UploadFile = File(...)):
+    """Test endpoint for alignment only"""
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
     if img is None:
-        return {"error": "Invalid image"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image"}
+        )
     
-    # Skip GFPGAN for faster testing
-    final_img = process_professional_pipeline(img, background_color)
-    
-    ok, encoded = cv2.imencode(".png", final_img)
-    return StreamingResponse(io.BytesIO(encoded.tobytes()), media_type="image/png")
+    try:
+        from retinaface import RetinaFace
+        
+        faces = RetinaFace.detect_faces(img)
+        if not faces:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No face detected"}
+            )
+        
+        best_key = max(faces.keys(), key=lambda k: faces[k].get("score", 0))
+        face = faces[best_key]
+        landmarks = face["landmarks"]
+        
+        left_eye = landmarks["left_eye"]
+        right_eye = landmarks["right_eye"]
+        
+        if left_eye[0] > right_eye[0]:
+            left_eye, right_eye = right_eye, left_eye
+        
+        dx = right_eye[0] - left_eye[0]
+        dy = right_eye[1] - left_eye[1]
+        angle_deg = math.degrees(math.atan2(dy, dx))
+        
+        aligned_img, final_landmarks = align_face_if_needed(img, landmarks, angle_deg)
+        
+        ok, encoded = cv2.imencode(".jpg", aligned_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+        if not ok:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Encoding failed"}
+            )
+        
+        import json
+        response_headers = {
+            "Content-Disposition": "inline; filename=aligned_photo.jpg",
+            "X-Original-Angle": str(angle_deg),
+            "X-Alignment-Applied": str(abs(angle_deg) >= MIN_ROTATE)
+        }
+        
+        return StreamingResponse(
+            io.BytesIO(encoded.tobytes()),
+            media_type="image/jpeg",
+            headers=response_headers
+        )
+        
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(e)}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Alignment test failed: {str(e)}"}
+        )
 
 
-@app.post("/api/test-saudi-id")
-async def test_saudi_id_pipeline(file: UploadFile = File(...)):
-    """
-    Test endpoint for complete Saudi ID pipeline
-    Useful for testing
-    """
+@app.post("/api/test-background-removal")
+async def test_background_removal(file: UploadFile = File(...)):
+    """Test endpoint for background removal only"""
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
     if img is None:
-        return {"error": "Invalid image"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image"}
+        )
     
-    # Skip GFPGAN for faster testing
-    final_img = process_saudi_id_pipeline(img, "white")
-    
-    ok, encoded = cv2.imencode(".png", final_img)
-    return StreamingResponse(io.BytesIO(encoded.tobytes()), media_type="image/png")
-
+    try:
+        result_img = bg_remover.remove_and_replace(
+            img,
+            bg_color=(255, 255, 255),
+            use_professional_composite=True
+        )
+        
+        ok, encoded = cv2.imencode(".jpg", result_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+        if not ok:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Encoding failed"}
+            )
+        
+        return StreamingResponse(
+            io.BytesIO(encoded.tobytes()),
+            media_type="image/jpeg",
+            headers={
+                "Content-Disposition": "inline; filename=bg_removed_photo.jpg"
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Background removal failed: {str(e)}"}
+        )
