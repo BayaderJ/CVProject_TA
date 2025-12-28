@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Professional Photo Enhancement</title>
+  <title>✨ مُتقن</title>
   <style>
     * {
       margin: 0;
@@ -235,35 +235,56 @@
       color: #555;
       margin: 0;
     }
+
+    .error-box {
+      background: #ffebee;
+      border-left: 4px solid #f44336;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+    }
+
+    .error-box p {
+      color: #c62828;
+      margin: 0;
+    }
+
+    .warning-box {
+      background: #fff3e0;
+      border-left: 4px solid #ff9800;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+    }
+
+    .warning-box p {
+      color: #e65100;
+      margin: 5px 0;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>📸 Professional Photo Enhancement</h1>
+    <h1> ✨ مُتقن</h1>
 
     <!-- Step 1: Choose Photo Type -->
     <div id="step1" class="step active">
       <h2 style="text-align: center; margin-bottom: 20px;">Choose Photo Type</h2>
       <div class="option-grid">
         <div class="option-card" data-type="professional">
-          <h3>👔 Professional Photo</h3>
+          <h3> Professional Photo</h3>
           <p>LinkedIn, Resume, Employee Card</p>
-          <p style="margin-top: 10px; font-size: 12px;">Choose your background color</p>
         </div>
         <div class="option-card" data-type="saudi_id">
-          <h3>🆔 Saudi ID Photo</h3>
+          <h3> Saudi ID Photo</h3>
           <p>Official ID Document</p>
-          <p style="margin-top: 10px; font-size: 12px;">White background (standard)</p>
         </div>
       </div>
     </div>
 
-    <!-- Step 2: Choose Background Color (only for professional) -->
+    <!-- Step 2a: Choose Background Color (only for professional) -->
     <div id="step2" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Choose Background Color</h2>
-      <div class="info-box">
-        <p>Select the background color for your professional photo</p>
-      </div>
       <div class="color-options">
         <div class="color-btn white" data-color="white">White</div>
         <div class="color-btn black" data-color="black">Black</div>
@@ -275,12 +296,27 @@
       </div>
     </div>
 
+    <!-- Step 2b: Choose Gender (only for Saudi ID) -->
+    <div id="step2b" class="step">
+      <h2 style="text-align: center; margin-bottom: 20px;">Select Gender</h2>
+      <div class="option-grid">
+        <div class="option-card gender-card" data-gender="male">
+          <h3> Male</h3>
+          <p>Requires Saudi Attire </p>
+        </div>
+        <div class="option-card gender-card" data-gender="female">
+          <h3> Female</h3>
+          <p>Requires Hijab</p>
+        </div>
+      </div>
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" onclick="goToStep(1)">← Back</button>
+      </div>
+    </div>
+
     <!-- Step 3: Upload or Capture Photo -->
     <div id="step3" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Upload or Capture Photo</h2>
-      <div class="info-box">
-        <p id="selectedOptionsInfo"></p>
-      </div>
       <div class="upload-section">
         <div class="upload-options">
           <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
@@ -297,7 +333,7 @@
       <div id="videoContainer">
         <video id="video" autoplay></video>
         <br>
-        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;">📸 Capture</button>
+        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;"> Capture</button>
         <button class="btn btn-secondary" onclick="stopCamera()" style="margin-top: 10px;">✖ Cancel</button>
       </div>
 
@@ -306,7 +342,7 @@
         <h3>Preview:</h3>
         <img id="previewImg" alt="Preview">
         <br>
-        <button class="upload-btn" onclick="processPhoto()" style="margin-top: 20px;">✨ Enhance Photo</button>
+        <button class="upload-btn" onclick="processPhoto()" style="margin-top: 20px;">✨ Modify Photo</button>
       </div>
 
       <div class="nav-buttons">
@@ -322,12 +358,25 @@
         <p style="font-size: 14px; color: #666; margin-top: 10px;">Applying face restoration and background enhancement</p>
       </div>
 
+      <div id="errorSection" class="hidden">
+        <div class="error-box">
+          <p id="errorMessage"></p>
+        </div>
+        <button class="btn btn-secondary" onclick="goToStep(3)">← Try Again</button>
+      </div>
+
       <div id="resultSection" class="preview-section hidden">
-        <h2 style="text-align: center; margin-bottom: 20px;">✅ Enhanced Result</h2>
+        
+        <!-- Warnings section (if any) -->
+        <div id="warningsBox" class="warning-box hidden">
+          <p><strong>⚠️ Warnings:</strong></p>
+          <div id="warningsList"></div>
+        </div>
+        
         <img id="resultImg" alt="Result">
         <div style="margin-top: 20px;">
-          <button class="upload-btn" onclick="downloadImage()">⬇ Download</button>
-          <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;">🔄 Start Over</button>
+          <button class="upload-btn" onclick="downloadImage()"> Download</button>
+          <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;"> Start Over</button>
         </div>
       </div>
     </div>
@@ -336,23 +385,34 @@
   <script>
     let photoType = '';
     let backgroundColor = '';
+    let gender = '';
     let capturedFile = null;
     let stream = null;
+    let resultBlob = null;
 
     // Step 1: Choose photo type
-    document.querySelectorAll('.option-card').forEach(card => {
+    document.querySelectorAll('.option-card[data-type]').forEach(card => {
       card.addEventListener('click', function() {
         document.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
         this.classList.add('selected');
         photoType = this.dataset.type;
         
-        // If Saudi ID, skip color selection
         if (photoType === 'saudi_id') {
           backgroundColor = 'white';
-          goToStep(3);
+          goToStep('2b');
         } else {
           goToStep(2);
         }
+      });
+    });
+
+    // Step 2b: Choose gender
+    document.querySelectorAll('.gender-card').forEach(card => {
+      card.addEventListener('click', function() {
+        document.querySelectorAll('.gender-card').forEach(c => c.classList.remove('selected'));
+        this.classList.add('selected');
+        gender = this.dataset.gender;
+        goToStep(3);
       });
     });
 
@@ -369,8 +429,35 @@
     // File input change
     document.getElementById('fileInput').addEventListener('change', function(e) {
       if (e.target.files.length > 0) {
-        capturedFile = e.target.files[0];
-        showPreview(capturedFile);
+        const originalFile = e.target.files[0];
+        
+        // Debug: Check file size
+        console.log(' File selected:', originalFile.name);
+        console.log(' Size:', originalFile.size, 'bytes', '(', (originalFile.size / 1024).toFixed(2), 'KB)');
+        
+        // Validate file isn't too small
+        if (originalFile.size < 50000) {  // Less than 50KB is suspicious
+          console.warn('⚠️ File is very small! Might be thumbnail or heavily compressed.');
+        }
+        
+        // Check actual image dimensions
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          img.onload = function() {
+            console.log('🖼️ Image dimensions:', img.width, 'x', img.height);
+            
+            if (img.width < 400 || img.height < 400) {
+              alert(`⚠️ Warning: Image is very small (${img.width}×${img.height} pixels).\n\nFor best results, please upload an image at least 640×640 pixels.\n\nCurrent image may not work properly.`);
+            }
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(originalFile);
+        
+        // Store the ORIGINAL file - don't modify it!
+        capturedFile = originalFile;
+        showPreview(originalFile);
       }
     });
 
@@ -385,14 +472,19 @@
 
     function goBack() {
       if (photoType === 'saudi_id') {
-        goToStep(1);
+        goToStep('2b');
       } else {
         goToStep(2);
       }
     }
 
     function updateSelectedOptionsInfo() {
-      const info = `Photo Type: ${photoType === 'professional' ? 'Professional Photo' : 'Saudi ID'} | Background: ${backgroundColor.charAt(0).toUpperCase() + backgroundColor.slice(1)}`;
+      let info = `Photo Type: ${photoType === 'professional' ? 'Professional Photo' : 'Saudi ID'}`;
+      if (photoType === 'professional') {
+        info += ` | Background: ${backgroundColor.charAt(0).toUpperCase() + backgroundColor.slice(1)}`;
+      } else {
+        info += ` | Gender: ${gender.charAt(0).toUpperCase() + gender.slice(1)} | Background: White`;
+      }
       document.getElementById('selectedOptionsInfo').textContent = info;
     }
 
@@ -444,12 +536,49 @@
         return;
       }
 
+      // 🐛 DEBUG: Check what we're actually sending
+      console.log('=== DEBUG FILE INFO ===');
+      console.log('File name:', capturedFile.name);
+      console.log('File size:', capturedFile.size, 'bytes');
+      console.log('File type:', capturedFile.type);
+      
+      // Create a temporary image to check dimensions
+      const tempImg = new Image();
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        tempImg.onload = () => {
+          console.log('Image dimensions:', tempImg.width, 'x', tempImg.height);
+          if (tempImg.width < 400 || tempImg.height < 400) {
+            console.error('❌ IMAGE TOO SMALL!', tempImg.width, 'x', tempImg.height);
+            alert(`Warning: Image is very small (${tempImg.width}×${tempImg.height}). Please upload a larger photo (at least 640×640).`);
+          }
+        };
+        tempImg.src = e.target.result;
+      };
+      reader.readAsDataURL(capturedFile);
+      // End of debug check
+
+      // Go to processing screen
       goToStep(4);
+      document.getElementById('loadingDiv').classList.add('active');
+      document.getElementById('errorSection').classList.add('hidden');
+      document.getElementById('resultSection').classList.add('hidden');
       
       const formData = new FormData();
       formData.append('file', capturedFile);
       formData.append('photo_type', photoType);
       formData.append('background_color', backgroundColor);
+      
+      if (photoType === 'saudi_id') {
+        formData.append('gender', gender);
+      }
+
+      console.log('Sending request:', {
+        photo_type: photoType,
+        background_color: backgroundColor,
+        gender: gender,
+        fileSize: capturedFile.size
+      });
 
       try {
         const response = await fetch('/api/process', {
@@ -457,38 +586,116 @@
           body: formData
         });
 
+        console.log('Response status:', response.status);
+        console.log('Response headers:', [...response.headers.entries()]);
+
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Processing failed');
+          const contentType = response.headers.get('content-type');
+          let errorMessage = 'Processing failed';
+          
+          if (contentType && contentType.includes('application/json')) {
+            const error = await response.json();
+            errorMessage = error.error || 'Processing failed';
+            
+            // Show validation errors if present
+            if (error.validation) {
+              if (error.validation.errors && error.validation.errors.length > 0) {
+                errorMessage = error.validation.errors.join('\n');
+              }
+            }
+          } else {
+            const textError = await response.text();
+            errorMessage = textError || 'Processing failed';
+          }
+          
+          throw new Error(errorMessage);
         }
 
+        // Get the image blob
         const blob = await response.blob();
+        console.log('Received blob:', blob.size, 'bytes', blob.type);
+        
+        if (blob.size === 0) {
+          throw new Error('Received empty image');
+        }
+
+        // Store blob for download
+        resultBlob = blob;
+
+        // Create URL for display
         const url = URL.createObjectURL(blob);
         
+        // Check for warnings in response headers
+        const warningsHeader = response.headers.get('x-warnings');
+        if (warningsHeader) {
+          try {
+            const warnings = JSON.parse(warningsHeader);
+            if (warnings && warnings.length > 0) {
+              displayWarnings(warnings);
+            }
+          } catch (e) {
+            console.log('Could not parse warnings:', e);
+          }
+        }
+
+        // Show result
         document.getElementById('loadingDiv').classList.remove('active');
         document.getElementById('resultImg').src = url;
         document.getElementById('resultSection').classList.remove('hidden');
+        
+        console.log('✅ Processing complete!');
+        
       } catch (error) {
-        alert('Error: ' + error.message);
-        goToStep(3);
+        console.error('❌ Error:', error);
+        document.getElementById('loadingDiv').classList.remove('active');
+        document.getElementById('errorMessage').textContent = error.message;
+        document.getElementById('errorSection').classList.remove('hidden');
       }
     }
 
+    function displayWarnings(warnings) {
+      const warningsBox = document.getElementById('warningsBox');
+      const warningsList = document.getElementById('warningsList');
+      
+      warningsList.innerHTML = '';
+      warnings.forEach(warning => {
+        const p = document.createElement('p');
+        p.textContent = '• ' + warning;
+        warningsList.appendChild(p);
+      });
+      
+      warningsBox.classList.remove('hidden');
+    }
+
     function downloadImage() {
-      const img = document.getElementById('resultImg');
+      if (!resultBlob) {
+        alert('No image to download');
+        return;
+      }
+
+      const url = URL.createObjectURL(resultBlob);
       const link = document.createElement('a');
-      link.href = img.src;
-      link.download = `enhanced_${photoType}_photo.png`;
+      link.href = url;
+      link.download = `enhanced_${photoType}_photo.jpg`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log('✅ Download triggered');
     }
 
     function startOver() {
       photoType = '';
       backgroundColor = '';
+      gender = '';
       capturedFile = null;
+      resultBlob = null;
       document.getElementById('fileInput').value = '';
       document.getElementById('previewSection').classList.add('hidden');
       document.getElementById('resultSection').classList.add('hidden');
+      document.getElementById('errorSection').classList.add('hidden');
+      document.getElementById('warningsBox').classList.add('hidden');
       document.getElementById('loadingDiv').classList.add('active');
       document.querySelectorAll('.option-card, .color-btn').forEach(el => el.classList.remove('selected'));
       goToStep(1);
@@ -496,4 +703,3 @@
   </script>
 </body>
 </html>
-
