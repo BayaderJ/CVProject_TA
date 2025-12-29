@@ -18,3 +18,4 @@ Thumbs.db
 experiments/pretrained_models/*.pth
 experiments/pretrained_models/*.pt"experiments/pretrained_models/*.pth" 
 "gfpgan/weights/*.pth" 
+models/
