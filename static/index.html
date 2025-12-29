@@ -261,6 +261,97 @@
       color: #e65100;
       margin: 5px 0;
     }
+
+    /* NEW: LLM Report Styles */
+    .report-box {
+      background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+      border-left: 4px solid #4caf50;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      direction: rtl;
+      text-align: right;
+    }
+
+    .report-box h3 {
+      color: #2e7d32;
+      margin-bottom: 15px;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .report-box h3::after {
+      content: "🤖";
+      font-size: 24px;
+    }
+
+    .report-box .report-content {
+      color: #1b5e20;
+      line-height: 1.8;
+      font-size: 16px;
+      white-space: pre-wrap;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      text-align: right;
+      direction: rtl;
+    }
+
+    .processing-steps {
+      background: #f5f5f5;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+
+    .processing-steps h4 {
+      color: #555;
+      margin-bottom: 10px;
+      font-size: 14px;
+      text-align: right;
+    }
+
+    .processing-steps ul {
+      list-style: none;
+      padding: 0;
+      direction: rtl;
+    }
+
+    .processing-steps li {
+      color: #666;
+      padding: 5px 0;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .processing-steps li::after {
+      content: "✓";
+      color: #4caf50;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .toggle-steps-btn {
+      background: none;
+      border: 1px solid #4caf50;
+      color: #4caf50;
+      padding: 8px 16px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 10px;
+      transition: all 0.3s;
+    }
+
+    .toggle-steps-btn:hover {
+      background: #4caf50;
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -301,11 +392,11 @@
       <h2 style="text-align: center; margin-bottom: 20px;">Select Gender</h2>
       <div class="option-grid">
         <div class="option-card gender-card" data-gender="male">
-          <h3> Male</h3>
-          <p>Requires Saudi Attire </p>
+          <h3>Male</h3>
+          <p>Requires Saudi Attire</p>
         </div>
         <div class="option-card gender-card" data-gender="female">
-          <h3> Female</h3>
+          <h3>Female</h3>
           <p>Requires Hijab</p>
         </div>
       </div>
@@ -333,7 +424,7 @@
       <div id="videoContainer">
         <video id="video" autoplay></video>
         <br>
-        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;"> Capture</button>
+        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;">📸 Capture</button>
         <button class="btn btn-secondary" onclick="stopCamera()" style="margin-top: 10px;">✖ Cancel</button>
       </div>
 
@@ -373,10 +464,26 @@
           <div id="warningsList"></div>
         </div>
         
+        <!-- Image first -->
         <img id="resultImg" alt="Result">
+
+        <!-- NEW: LLM Report Section (UNDER the image) -->
+        <div id="reportSection" class="report-box hidden">
+          <h3>تقرير معالجة الصورة</h3>
+          <div class="report-content" id="reportContent"></div>
+          <button class="toggle-steps-btn" onclick="toggleProcessingSteps()">
+            <span id="toggleStepsText">عرض خطوات المعالجة التفصيلية</span>
+          </button>
+          <div id="processingStepsSection" class="processing-steps hidden">
+            <h4>خطوات المعالجة:</h4>
+            <ul id="processingStepsList"></ul>
+          </div>
+        </div>
+        
+        <!-- Buttons at the bottom -->
         <div style="margin-top: 20px;">
-          <button class="upload-btn" onclick="downloadImage()"> Download</button>
-          <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;"> Start Over</button>
+          <button class="upload-btn" onclick="downloadImage()">💾 Download</button>
+          <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;">🔄 Start Over</button>
         </div>
       </div>
     </div>
@@ -389,6 +496,7 @@
     let capturedFile = null;
     let stream = null;
     let resultBlob = null;
+    let processingStepsVisible = false;
 
     // Step 1: Choose photo type
     document.querySelectorAll('.option-card[data-type]').forEach(card => {
@@ -432,8 +540,8 @@
         const originalFile = e.target.files[0];
         
         // Debug: Check file size
-        console.log(' File selected:', originalFile.name);
-        console.log(' Size:', originalFile.size, 'bytes', '(', (originalFile.size / 1024).toFixed(2), 'KB)');
+        console.log('📁 File selected:', originalFile.name);
+        console.log('📊 Size:', originalFile.size, 'bytes', '(', (originalFile.size / 1024).toFixed(2), 'KB)');
         
         // Validate file isn't too small
         if (originalFile.size < 50000) {  // Less than 50KB is suspicious
@@ -464,10 +572,6 @@
     function goToStep(stepNum) {
       document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
       document.getElementById('step' + stepNum).classList.add('active');
-      
-      if (stepNum === 3) {
-        updateSelectedOptionsInfo();
-      }
     }
 
     function goBack() {
@@ -476,16 +580,6 @@
       } else {
         goToStep(2);
       }
-    }
-
-    function updateSelectedOptionsInfo() {
-      let info = `Photo Type: ${photoType === 'professional' ? 'Professional Photo' : 'Saudi ID'}`;
-      if (photoType === 'professional') {
-        info += ` | Background: ${backgroundColor.charAt(0).toUpperCase() + backgroundColor.slice(1)}`;
-      } else {
-        info += ` | Gender: ${gender.charAt(0).toUpperCase() + gender.slice(1)} | Background: White`;
-      }
-      document.getElementById('selectedOptionsInfo').textContent = info;
     }
 
     async function startCamera() {
@@ -611,36 +705,58 @@
           throw new Error(errorMessage);
         }
 
-        // Get the image blob
-        const blob = await response.blob();
-        console.log('Received blob:', blob.size, 'bytes', blob.type);
-        
-        if (blob.size === 0) {
-          throw new Error('Received empty image');
+        // ====== NEW: Parse JSON response instead of blob ======
+        const data = await response.json();
+        console.log('Received JSON response:', {
+          hasImage: !!data.image_base64,
+          hasReport: !!data.report,
+          hasSteps: !!data.processing_steps,
+          imageSize: data.image_base64 ? data.image_base64.length : 0
+        });
+
+        if (!data.image_base64) {
+          throw new Error('No image in response');
         }
 
-        // Store blob for download
-        resultBlob = blob;
-
-        // Create URL for display
-        const url = URL.createObjectURL(blob);
+        // Convert base64 to blob for download
+        const byteCharacters = atob(data.image_base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        resultBlob = new Blob([byteArray], { type: 'image/jpeg' });
         
-        // Check for warnings in response headers
-        const warningsHeader = response.headers.get('x-warnings');
-        if (warningsHeader) {
-          try {
-            const warnings = JSON.parse(warningsHeader);
-            if (warnings && warnings.length > 0) {
-              displayWarnings(warnings);
-            }
-          } catch (e) {
-            console.log('Could not parse warnings:', e);
-          }
+        console.log('Created blob:', resultBlob.size, 'bytes');
+
+        // Display image
+        const imageUrl = `data:image/jpeg;base64,${data.image_base64}`;
+        document.getElementById('resultImg').src = imageUrl;
+        
+        // ====== NEW: Display LLM Report ======
+        if (data.report) {
+          document.getElementById('reportContent').textContent = data.report;
+          document.getElementById('reportSection').classList.remove('hidden');
+        }
+
+        // ====== NEW: Display Processing Steps ======
+        if (data.processing_steps && data.processing_steps.length > 0) {
+          const stepsList = document.getElementById('processingStepsList');
+          stepsList.innerHTML = '';
+          data.processing_steps.forEach(step => {
+            const li = document.createElement('li');
+            li.textContent = step;
+            stepsList.appendChild(li);
+          });
+        }
+
+        // Check for warnings
+        if (data.warnings && data.warnings.length > 0) {
+          displayWarnings(data.warnings);
         }
 
         // Show result
         document.getElementById('loadingDiv').classList.remove('active');
-        document.getElementById('resultImg').src = url;
         document.getElementById('resultSection').classList.remove('hidden');
         
         console.log('✅ Processing complete!');
@@ -667,6 +783,21 @@
       warningsBox.classList.remove('hidden');
     }
 
+    function toggleProcessingSteps() {
+      const stepsSection = document.getElementById('processingStepsSection');
+      const toggleText = document.getElementById('toggleStepsText');
+      
+      processingStepsVisible = !processingStepsVisible;
+      
+      if (processingStepsVisible) {
+        stepsSection.classList.remove('hidden');
+        toggleText.textContent = 'إخفاء خطوات المعالجة';
+      } else {
+        stepsSection.classList.add('hidden');
+        toggleText.textContent = 'عرض خطوات المعالجة التفصيلية';
+      }
+    }
+
     function downloadImage() {
       if (!resultBlob) {
         alert('No image to download');
@@ -691,11 +822,14 @@
       gender = '';
       capturedFile = null;
       resultBlob = null;
+      processingStepsVisible = false;
       document.getElementById('fileInput').value = '';
       document.getElementById('previewSection').classList.add('hidden');
       document.getElementById('resultSection').classList.add('hidden');
       document.getElementById('errorSection').classList.add('hidden');
       document.getElementById('warningsBox').classList.add('hidden');
+      document.getElementById('reportSection').classList.add('hidden');
+      document.getElementById('processingStepsSection').classList.add('hidden');
       document.getElementById('loadingDiv').classList.add('active');
       document.querySelectorAll('.option-card, .color-btn').forEach(el => el.classList.remove('selected'));
       goToStep(1);

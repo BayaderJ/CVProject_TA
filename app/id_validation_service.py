@@ -40,7 +40,7 @@ class IDPhotoValidator:
         self._initialize_opencv_detector()
         
         # Thresholds
-        self.glasses_threshold = 0.35
+        self.glasses_threshold = 0.52
         self.hijab_threshold = 0.5
         self.ghutra_threshold = 0.5
         

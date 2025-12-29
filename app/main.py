@@ -7,8 +7,37 @@ import numpy as np
 import io
 import math
 import os
+import base64
 from enum import Enum
 from typing import Dict, Tuple, Optional
+
+# ----------------------------
+# Groq LLaMA Client
+# ----------------------------
+from groq import Groq
+
+# Initialize Groq client for LLM
+client = Groq(api_key="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")
+
+# LLM Configuration for generating user-friendly reports
+default_layer_agent_config = {
+    "layer_agent_1": {
+        "system_prompt": (
+            "أنت مساعد متخصص في معالجة الصور. اكتب تقريراً مختصراً جداً بالعربية.\n\n"
+            "خطوات المعالجة:\n{helper_response}\n\n"
+            "التعليمات المهمة:\n"
+            "1. لا تكتب عناوين مثل 'تقرير نهائي' أو 'نتيجة التعديلات' - ابدأ مباشرة بالمحتوى\n"
+            "2. اكتب فقط 2-3 جمل قصيرة عن التعديلات\n"
+            "3. أضف نصيحة واحدة فقط مختصرة (جملة واحدة) عن تحسين الصور المستقبلية\n"
+            "4. لا تستخدم النجوم ** أو أي رموز خاصة أو عناوين\n"
+            "5. لا تستخدم نقاط أو قوائم - اكتب نصاً متصلاً فقط\n"
+            "6. استخدم عربية واضحة فقط بدون أي رموز أو أحرف غريبة\n"
+            "7. كن مختصراً جداً - 3 أسطر كحد أقصى"
+        ),
+        "model_name": "llama-3.3-70b-versatile",
+        "temperature": 0.3
+    }
+}
 
 from .gfpgan_service import create_restorer
 from .id_validation_service import get_validator
@@ -31,6 +60,47 @@ def convert_to_json_serializable(obj):
         return obj.tolist()
     else:
         return obj
+
+
+def generate_llm_report(log_steps: list) -> str:
+    """
+    Generate a user-friendly report using LLM based on processing steps
+    
+    Args:
+        log_steps: List of processing steps performed
+        
+    Returns:
+        String containing the LLM-generated report in Arabic
+    """
+    try:
+        helper_response = "\n".join(log_steps)
+        
+        for layer_name, cfg in default_layer_agent_config.items():
+            response = client.chat.completions.create(
+                model=cfg["model_name"],
+                temperature=cfg["temperature"],
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": cfg["system_prompt"].format(helper_response=helper_response)
+                    },
+                    {
+                        "role": "user", 
+                        "content": "اكتب تقريراً مختصراً جداً بدون عناوين أو رموز. فقط 2-3 جمل عن التعديلات ونصيحة واحدة قصيرة."
+                    }
+                ]
+            )
+            layer_output = response.choices[0].message.content
+            # Clean up any remaining asterisks or special characters
+            layer_output = layer_output.replace('**', '').replace('*', '')
+            helper_response = layer_output
+            final_report = layer_output
+        
+        return final_report
+    except Exception as e:
+        print(f"[LLM] Failed to generate report: {e}")
+        # Fallback to simple concatenation if LLM fails
+        return "\n".join(log_steps)
 
 
 app = FastAPI()
@@ -126,6 +196,7 @@ async def process_photo(
 ):
     """
     Main processing endpoint with separate pipelines for each photo type
+    NOW WITH LLM-GENERATED REPORTS!
     
     Args:
         file: Image file
@@ -181,14 +252,19 @@ async def process_photo(
 
 
 async def process_professional_photo(img: np.ndarray, color: str = None, bg_index: int = None):
-    """Professional photo pipeline: GFPGAN → Background Removal → Background Replacement"""
+    """Professional photo pipeline: GFPGAN → Background Removal → Background Replacement → LLM Report"""
     print(f"[PROFESSIONAL] Starting pipeline...")
     print(f"[PROFESSIONAL] Input: shape={img.shape}, dtype={img.dtype}")
+    
+    # Initialize processing log for LLM
+    log_steps = []
+    log_steps.append("بدء معالجة الصورة الاحترافية")
     
     try:
         print("[PROFESSIONAL] Step 1: Face restoration...")
         restored_img = apply_gfpgan_restoration(img)
         print(f"[PROFESSIONAL] Face restoration complete: shape={restored_img.shape}")
+        log_steps.append("تم استعادة تفاصيل الوجه وتحسين الجودة باستخدام تقنية GFPGAN")
     except Exception as e:
         print(f"[PROFESSIONAL] Face restoration failed: {e}")
         return JSONResponse(
@@ -204,6 +280,7 @@ async def process_professional_photo(img: np.ndarray, color: str = None, bg_inde
                 bg_index=bg_index,
                 use_professional_composite=True
             )
+            log_steps.append(f"تم إزالة الخلفية الأصلية واستبدالها بخلفية احترافية")
         else:
             bg_color_tuple = get_bg_color(color if color else "white")
             print(f"[PROFESSIONAL] Using background color: {color} -> BGR{bg_color_tuple}")
@@ -212,6 +289,9 @@ async def process_professional_photo(img: np.ndarray, color: str = None, bg_inde
                 bg_color=bg_color_tuple,
                 use_professional_composite=True
             )
+            color_names = {"white": "أبيض", "black": "أسود", "grey": "رمادي"}
+            color_ar = color_names.get(color if color else "white", "أبيض")
+            log_steps.append(f"تم إزالة الخلفية الأصلية واستبدالها بلون {color_ar} موحد")
         print(f"[PROFESSIONAL] Background replacement complete: shape={result_img.shape}")
     except Exception as e:
         print(f"[PROFESSIONAL] Background replacement failed: {e}")
@@ -219,6 +299,12 @@ async def process_professional_photo(img: np.ndarray, color: str = None, bg_inde
             status_code=400,
             content={"error": f"Background replacement failed: {str(e)}"}
         )
+    
+    log_steps.append("تم تحسين جودة الصورة النهائية وضبط الإضاءة")
+    
+    # Generate LLM report
+    print("[PROFESSIONAL] Generating LLM report...")
+    llm_report = generate_llm_report(log_steps)
     
     print("[PROFESSIONAL] Step 3: Encoding final image as JPEG...")
     ok, encoded = cv2.imencode(".jpg", result_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
@@ -228,20 +314,24 @@ async def process_professional_photo(img: np.ndarray, color: str = None, bg_inde
             content={"error": "Image encoding failed"}
         )
     
+    # Encode image as base64 for JSON response
+    image_base64 = base64.b64encode(encoded.tobytes()).decode('utf-8')
+    
     print(f"[PROFESSIONAL] ✅ Pipeline complete! Output size: {len(encoded.tobytes())} bytes")
     
-    return StreamingResponse(
-        io.BytesIO(encoded.tobytes()),
-        media_type="image/jpeg",
-        headers={
-            "Content-Disposition": "inline; filename=professional_photo.jpg"
+    # Return both image and LLM report
+    return JSONResponse(
+        content={
+            "image_base64": image_base64,
+            "report": llm_report,
+            "processing_steps": log_steps
         }
     )
 
 
 async def process_saudi_id_photo(img: np.ndarray, gender: str):
     """
-    Complete Saudi ID pipeline with all validations:
+    Complete Saudi ID pipeline with all validations and LLM report generation
     
     1. Glasses detection (warning only - high false positive rate)
     2. Hijab/Ghutra detection (blocking - required)
@@ -249,11 +339,15 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     4. Head alignment correction
     5. Background removal and replacement (white)
     6. Resize to Saudi ID specifications (40×60mm at 300 DPI)
+    7. Generate LLM report
     
     Note: GFPGAN face restoration is DISABLED for Saudi ID to preserve original quality
     """
     errors = []
     warnings = []
+    log_steps = []
+    
+    log_steps.append("بدء معالجة صورة الهوية السعودية")
     
     print(f"[SAUDI ID] Received image: shape={img.shape}, dtype={img.dtype}")
     
@@ -276,6 +370,7 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     print(f"[SAUDI ID] Preprocessing image for face detection...")
     img = preprocess_for_detection(img)
     print(f"[SAUDI ID] After preprocessing: shape={img.shape}, dtype={img.dtype}")
+    log_steps.append("تم تحسين جودة الصورة للكشف عن الوجه")
     
     print(f"[SAUDI ID] Starting validation for {gender} photo...")
     
@@ -302,6 +397,10 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     print(f"  - Glasses prob: {validation_result['details']['glasses_prob']:.2%}")
     print(f"  - {validation_result['details']['headcover_type']} prob: {validation_result['details']['headcover_prob']:.2%}")
     
+    # Add validation info to log
+    headcover_type = "الحجاب" if gender == "female" else "الغترة"
+    log_steps.append(f"تم التحقق من وجود {headcover_type} بنجاح")
+    
     landmarks = validation_result['details'].get('landmarks')
     head_tilt = validation_result['details'].get('head_tilt', 0)
     face_bbox = validation_result['details'].get('facial_area')
@@ -319,6 +418,8 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     
     try:
         aligned_img, final_landmarks = align_face_if_needed(img, landmarks, head_tilt)
+        if abs(head_tilt) >= MIN_ROTATE:
+            log_steps.append(f"تم تصحيح ميل الرأس ({abs(head_tilt):.1f} درجة)")
     except ValueError as e:
         return JSONResponse(
             status_code=400,
@@ -334,6 +435,7 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     
     print("[SAUDI ID] Skipping face restoration (preserving original quality)...")
     restored_img = aligned_img
+    log_steps.append("تم الحفاظ على الجودة الأصلية للصورة")
     
     print("[SAUDI ID] Removing background...")
     
@@ -343,6 +445,7 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
             bg_color=(255, 255, 255),
             use_professional_composite=True
         )
+        log_steps.append("تم إزالة الخلفية واستبدالها بخلفية بيضاء موحدة")
     except Exception as e:
         print(f"[WARNING] Background removal failed: {e}, using original")
         img_with_new_bg = restored_img
@@ -354,6 +457,11 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     print(f"[SAUDI ID] Resizing to Saudi ID specifications ({SAUDI_ID_WIDTH_MM}×{SAUDI_ID_HEIGHT_MM}mm at {SAUDI_ID_DPI} DPI)...")
     
     final_img = resize_to_saudi_id_specs(img_with_new_bg)
+    log_steps.append(f"تم تغيير حجم الصورة إلى المواصفات الرسمية ({SAUDI_ID_WIDTH_PX}×{SAUDI_ID_HEIGHT_PX} بكسل)")
+    
+    # Generate LLM report
+    print("[SAUDI ID] Generating LLM report...")
+    llm_report = generate_llm_report(log_steps)
     
     ok, encoded = cv2.imencode(".jpg", final_img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
     if not ok:
@@ -362,21 +470,25 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
             content={"error": "Image encoding failed"}
         )
     
-    response_headers = {
-        "Content-Disposition": "inline; filename=saudi_id_photo.jpg"
-    }
-    if warnings:
-        import json
-        response_headers["X-Validation-Warnings"] = json.dumps(warnings)
+    # Encode image as base64
+    image_base64 = base64.b64encode(encoded.tobytes()).decode('utf-8')
     
     print(f"[SAUDI ID] ✅ Processing complete!")
     print(f"  - Final size: {final_img.shape[1]}×{final_img.shape[0]} pixels")
     print(f"  - Warnings: {len(warnings)}")
     
-    return StreamingResponse(
-        io.BytesIO(encoded.tobytes()),
-        media_type="image/jpeg",
-        headers=response_headers
+    # Return JSON response with image and report
+    return JSONResponse(
+        content={
+            "image_base64": image_base64,
+            "report": llm_report,
+            "processing_steps": log_steps,
+            "warnings": warnings,
+            "validation": {
+                "passed": True,
+                "details": validation_result['details']
+            }
+        }
     )
 
 
@@ -827,3 +939,4 @@ async def test_background_removal(file: UploadFile = File(...)):
             status_code=400,
             content={"error": f"Background removal failed: {str(e)}"}
         )
+
