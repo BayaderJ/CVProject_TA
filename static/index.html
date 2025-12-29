@@ -262,7 +262,7 @@
       margin: 5px 0;
     }
 
-    /* NEW: LLM Report Styles */
+    /*  LLM Report Styles */
     .report-box {
       background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
       border-left: 4px solid #4caf50;
@@ -358,7 +358,7 @@
   <div class="container">
     <h1> ✨ مُتقن</h1>
 
-    <!-- Step 1: Choose Photo Type -->
+    <!--Choosing Photo Type -->
     <div id="step1" class="step active">
       <h2 style="text-align: center; margin-bottom: 20px;">Choose Photo Type</h2>
       <div class="option-grid">
@@ -373,7 +373,7 @@
       </div>
     </div>
 
-    <!-- Step 2a: Choose Background Color (only for professional) -->
+    <!--Choosing Background Color (only for professional pic) -->
     <div id="step2" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Choose Background Color</h2>
       <div class="color-options">
@@ -387,7 +387,7 @@
       </div>
     </div>
 
-    <!-- Step 2b: Choose Gender (only for Saudi ID) -->
+    <!--Choosing Gender (only for Saudi ID) -->
     <div id="step2b" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Select Gender</h2>
       <div class="option-grid">
@@ -405,7 +405,7 @@
       </div>
     </div>
 
-    <!-- Step 3: Upload or Capture Photo -->
+    <!--Uploading or Capturing a photo -->
     <div id="step3" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Upload or Capture Photo</h2>
       <div class="upload-section">
@@ -441,7 +441,7 @@
       </div>
     </div>
 
-    <!-- Step 4: Processing & Result -->
+    <!--Processing & Result -->
     <div id="step4" class="step">
       <div class="loading active" id="loadingDiv">
         <div class="spinner"></div>
@@ -458,16 +458,16 @@
 
       <div id="resultSection" class="preview-section hidden">
         
-        <!-- Warnings section (if any) -->
+        <!--Warnings section (if any) -->
         <div id="warningsBox" class="warning-box hidden">
           <p><strong>⚠️ Warnings:</strong></p>
           <div id="warningsList"></div>
         </div>
         
-        <!-- Image first -->
+        <!--Image first -->
         <img id="resultImg" alt="Result">
 
-        <!-- NEW: LLM Report Section (UNDER the image) -->
+        <!--LLM Report Section-->
         <div id="reportSection" class="report-box hidden">
           <h3>تقرير معالجة الصورة</h3>
           <div class="report-content" id="reportContent"></div>
@@ -480,7 +480,7 @@
           </div>
         </div>
         
-        <!-- Buttons at the bottom -->
+        <!--Buttons at the bottom -->
         <div style="margin-top: 20px;">
           <button class="upload-btn" onclick="downloadImage()">💾 Download</button>
           <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;">🔄 Start Over</button>
@@ -498,7 +498,7 @@
     let resultBlob = null;
     let processingStepsVisible = false;
 
-    // Step 1: Choose photo type
+    //Choosing photo type
     document.querySelectorAll('.option-card[data-type]').forEach(card => {
       card.addEventListener('click', function() {
         document.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
@@ -514,7 +514,7 @@
       });
     });
 
-    // Step 2b: Choose gender
+    //Choosing gender
     document.querySelectorAll('.gender-card').forEach(card => {
       card.addEventListener('click', function() {
         document.querySelectorAll('.gender-card').forEach(c => c.classList.remove('selected'));
@@ -524,7 +524,7 @@
       });
     });
 
-    // Step 2: Choose background color
+    //Choosing background color
     document.querySelectorAll('.color-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
@@ -534,21 +534,21 @@
       });
     });
 
-    // File input change
+    //File input change
     document.getElementById('fileInput').addEventListener('change', function(e) {
       if (e.target.files.length > 0) {
         const originalFile = e.target.files[0];
         
-        // Debug: Check file size
+        //Debug: Check file size
         console.log('📁 File selected:', originalFile.name);
         console.log('📊 Size:', originalFile.size, 'bytes', '(', (originalFile.size / 1024).toFixed(2), 'KB)');
         
-        // Validate file isn't too small
-        if (originalFile.size < 50000) {  // Less than 50KB is suspicious
+        //Validate file isn't too small
+        if (originalFile.size < 50000) {
           console.warn('⚠️ File is very small! Might be thumbnail or heavily compressed.');
         }
         
-        // Check actual image dimensions
+        //Check actual image dimensions
         const img = new Image();
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -563,7 +563,6 @@
         };
         reader.readAsDataURL(originalFile);
         
-        // Store the ORIGINAL file - don't modify it!
         capturedFile = originalFile;
         showPreview(originalFile);
       }
@@ -630,13 +629,13 @@
         return;
       }
 
-      // 🐛 DEBUG: Check what we're actually sending
+      //DEBUG: Check what is actually being send
       console.log('=== DEBUG FILE INFO ===');
       console.log('File name:', capturedFile.name);
       console.log('File size:', capturedFile.size, 'bytes');
       console.log('File type:', capturedFile.type);
       
-      // Create a temporary image to check dimensions
+      //Create a temporary image to check dimensions
       const tempImg = new Image();
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -652,7 +651,7 @@
       reader.readAsDataURL(capturedFile);
       // End of debug check
 
-      // Go to processing screen
+      // processing screen
       goToStep(4);
       document.getElementById('loadingDiv').classList.add('active');
       document.getElementById('errorSection').classList.add('hidden');
@@ -691,7 +690,7 @@
             const error = await response.json();
             errorMessage = error.error || 'Processing failed';
             
-            // Show validation errors if present
+            //Displaying validation errors
             if (error.validation) {
               if (error.validation.errors && error.validation.errors.length > 0) {
                 errorMessage = error.validation.errors.join('\n');
@@ -705,7 +704,7 @@
           throw new Error(errorMessage);
         }
 
-        // ====== NEW: Parse JSON response instead of blob ======
+        // Parse JSON response
         const data = await response.json();
         console.log('Received JSON response:', {
           hasImage: !!data.image_base64,
@@ -729,17 +728,17 @@
         
         console.log('Created blob:', resultBlob.size, 'bytes');
 
-        // Display image
+        //Display image
         const imageUrl = `data:image/jpeg;base64,${data.image_base64}`;
         document.getElementById('resultImg').src = imageUrl;
         
-        // ====== NEW: Display LLM Report ======
+        //Display LLM Report
         if (data.report) {
           document.getElementById('reportContent').textContent = data.report;
           document.getElementById('reportSection').classList.remove('hidden');
         }
 
-        // ====== NEW: Display Processing Steps ======
+        //Display Processing Steps
         if (data.processing_steps && data.processing_steps.length > 0) {
           const stepsList = document.getElementById('processingStepsList');
           stepsList.innerHTML = '';
@@ -750,12 +749,12 @@
           });
         }
 
-        // Check for warnings
+        //Check for warnings
         if (data.warnings && data.warnings.length > 0) {
           displayWarnings(data.warnings);
         }
 
-        // Show result
+        //Show result
         document.getElementById('loadingDiv').classList.remove('active');
         document.getElementById('resultSection').classList.remove('hidden');
         

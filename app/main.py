@@ -34,7 +34,9 @@ default_layer_agent_config = {
             "6. استخدم عربية واضحة فقط بدون أي رموز أو أحرف غريبة\n"
             "7. كن مختصراً جداً - 3 أسطر كحد أقصى"
         ),
-        "model_name": "llama-3.3-70b-versatile",
+        # "model_name": "llama-3.3-70b-versatile",
+        "model_name": "allam-2-7b",
+        
         "temperature": 0.3
     }
 }
@@ -338,7 +340,7 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     3. Face detection and positioning
     4. Head alignment correction
     5. Background removal and replacement (white)
-    6. Resize to Saudi ID specifications (40×60mm at 300 DPI)
+    6. Resize to Saudi ID specifications (480×640px at 300 DPI)
     7. Generate LLM report
     
     Note: GFPGAN face restoration is DISABLED for Saudi ID to preserve original quality
