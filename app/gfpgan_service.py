@@ -1,7 +1,6 @@
 import os
 from gfpgan import GFPGANer
 
-# Base directory is CVPROJECT
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 MODEL_PATH = os.path.join(
     BASE_DIR,

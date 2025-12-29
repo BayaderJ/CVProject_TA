@@ -1,80 +1,21 @@
 fastapi
 uvicorn[standard]
 python-multipart
-
-# Core numerical stack
 numpy==1.26.4
-
-# Computer Vision (compatible with NumPy 1.x)
 opencv-python<4.10.0
 opencv-python-headless<4.10.0
-
-# PyTorch (for GFPGAN)
 torch==2.0.1
 torchvision==0.15.2
 torchaudio==2.0.2
-
-# Face Enhancement
 gfpgan
 basicsr
 facexlib
 realesrgan
-
-# ID Validation - TensorFlow
 tensorflow>=2.13.0
 scikit-learn>=1.0.0
 tf-keras
-# Face Detection - REQUIRED for alignment
 retina-face
-
-# Background Removal
 rembg==2.0.50
-
-# Additional ML Support
 h5py>=3.10.0
 
 
-# fastapi
-# uvicorn
-# gfpgan
-# basicsr
-# facexlib
-# realesrgan
-# opencv-python-headless
-# numpy
-
-# fastapi
-# uvicorn[standard]
-# python-multipart
-
-# # Computer Vision
-# opencv-python
-# opencv-python-headless
-
-# numpy<2
-
-
-# # PyTorch (for GFPGAN)
-# torch
-# torchvision
-
-# # Face Enhancement
-# gfpgan
-# basicsr
-# facexlib
-# realesrgan
-
-# # ID Validation - TensorFlow
-# tensorflow>=2.13.0
-# scikit-learn>=1.0.0
-
-# # Face Detection - REQUIRED for alignment
-# retina-face
-
-# # ============================================
-# # Optional: Background Removal (NOT NEEDED YET)
-# # Uncomment when ready to implement:
-# # ============================================
-# # rembg[gpu]  # For GPU acceleration
-# # or
-# # rembg  # CPU only

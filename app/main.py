@@ -10,16 +10,15 @@ import os
 import base64
 from enum import Enum
 from typing import Dict, Tuple, Optional
-
-# ----------------------------
-# Groq LLaMA Client
-# ----------------------------
 from groq import Groq
+from .gfpgan_service import create_restorer
+from .id_validation_service import get_validator
+from .background_removal_service import get_background_remover
 
 # Initialize Groq client for LLM
-client = Groq(api_key="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")
+client = Groq(api_key="GROQ_API_KEY")
 
-# LLM Configuration for generating user-friendly reports
+# LLM Configuration
 default_layer_agent_config = {
     "layer_agent_1": {
         "system_prompt": (
@@ -34,16 +33,12 @@ default_layer_agent_config = {
             "6. استخدم عربية واضحة فقط بدون أي رموز أو أحرف غريبة\n"
             "7. كن مختصراً جداً - 3 أسطر كحد أقصى"
         ),
-        # "model_name": "llama-3.3-70b-versatile",
         "model_name": "allam-2-7b",
         
         "temperature": 0.3
     }
 }
 
-from .gfpgan_service import create_restorer
-from .id_validation_service import get_validator
-from .background_removal_service import get_background_remover
 
 
 def convert_to_json_serializable(obj):
@@ -66,7 +61,7 @@ def convert_to_json_serializable(obj):
 
 def generate_llm_report(log_steps: list) -> str:
     """
-    Generate a user-friendly report using LLM based on processing steps
+    Generating user-friendly report using LLM based on processing steps
     
     Args:
         log_steps: List of processing steps performed
@@ -106,7 +101,7 @@ def generate_llm_report(log_steps: list) -> str:
 
 
 app = FastAPI()
-
+# CORS middleware - Cross-Origin Resource Sharing
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -198,12 +193,11 @@ async def process_photo(
 ):
     """
     Main processing endpoint with separate pipelines for each photo type
-    NOW WITH LLM-GENERATED REPORTS!
     
     Args:
         file: Image file
         photo_type: "professional" or "saudi_id"
-        background_color: "white", "black", "grey" (for solid colors)
+        background_color: "white", "black", "grey"
         background_index: Index of background image from backgrounds/ folder (optional)
         gender: "male" or "female" (required for saudi_id)
     """
@@ -254,7 +248,12 @@ async def process_photo(
 
 
 async def process_professional_photo(img: np.ndarray, color: str = None, bg_index: int = None):
-    """Professional photo pipeline: GFPGAN → Background Removal → Background Replacement → LLM Report"""
+    """Professional photo pipeline:
+    GFPGAN
+    Background Removal
+    Background Replacement
+    LLM Report"""
+
     print(f"[PROFESSIONAL] Starting pipeline...")
     print(f"[PROFESSIONAL] Input: shape={img.shape}, dtype={img.dtype}")
     
@@ -335,7 +334,7 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
     """
     Complete Saudi ID pipeline with all validations and LLM report generation
     
-    1. Glasses detection (warning only - high false positive rate)
+    1. Glasses detection (warning only because our model has high false positive rate)
     2. Hijab/Ghutra detection (blocking - required)
     3. Face detection and positioning
     4. Head alignment correction
@@ -495,10 +494,8 @@ async def process_saudi_id_photo(img: np.ndarray, gender: str):
 
 
 def resize_to_saudi_id_specs(img: np.ndarray) -> np.ndarray:
-    """
-    Resize to 480x640 canvas while preserving face aspect ratio.
-    Scales uniformly, centers image, pads with white background.
-    """
+
+    #Resize to 480x640 while preserving face aspect ratio
     if img is None:
         raise ValueError("Input image is None")
     if not isinstance(img, np.ndarray):
@@ -536,7 +533,7 @@ def resize_to_saudi_id_specs(img: np.ndarray) -> np.ndarray:
 
 
 def get_bg_color(color_name: str) -> Tuple[int, int, int]:
-    """Convert color name to BGR tuple"""
+    #Converting color name to BGR tuple
     color_map = {
         "white": (255, 255, 255),
         "black": (0, 0, 0),
@@ -613,7 +610,7 @@ def align_face_if_needed(img_bgr: np.ndarray, landmarks: dict, angle_deg: float)
 
 
 def apply_gfpgan_restoration(img: np.ndarray) -> np.ndarray:
-    """Apply GFPGAN face restoration"""
+
     if img is None:
         raise ValueError("Input image is None")
     if not isinstance(img, np.ndarray):

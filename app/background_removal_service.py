@@ -1,7 +1,7 @@
 """
 Background Removal Service
-Professional background removal using rembg with high-quality compositing
-Based on CV_Before_Deploy.ipynb
+Professional background removal using rembg
+
 """
 
 import cv2
@@ -11,14 +11,11 @@ from typing import Tuple, Optional
 
 
 class BackgroundRemover:
-    """
-    Professional background removal service using rembg
-    """
     
     def __init__(self):
-        """
-        Initialize the background remover
-        """
+    
+        #Initialize the background remover
+        
         try:
             from rembg import remove
             self.remove_fn = remove
@@ -31,7 +28,7 @@ class BackgroundRemover:
             )
     
     def remove_background(
-        self, 
+        self,
         img_bgr: np.ndarray,
         alpha_matting: bool = True,
         alpha_matting_foreground_threshold: int = 240,
@@ -49,7 +46,7 @@ class BackgroundRemover:
             alpha_matting_erode_size: Erosion kernel size for edge cleanup
         
         Returns:
-            BGRA image (with alpha channel) - use this for compositing
+            BGRA image (with alpha channel)
         """
         # Convert BGR to RGB for rembg
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
@@ -84,7 +81,6 @@ class BackgroundRemover:
     ) -> np.ndarray:
         """
         Professional compositing with edge cleanup and smoothing
-        Based on the notebook's professional_composite function
         
         Args:
             fg_rgba: RGBA foreground image (from rembg)
@@ -95,8 +91,6 @@ class BackgroundRemover:
         """
         # Convert RGBA to BGRA if needed
         if fg_rgba.shape[2] == 4:
-            # Check if it's RGBA or BGRA
-            # Assume it's BGRA (from our remove_background function)
             alpha = fg_rgba[:, :, 3]
             fg_bgr = fg_rgba[:, :, :3]
         else:
@@ -138,7 +132,7 @@ class BackgroundRemover:
         alpha_matting: bool = True
     ) -> np.ndarray:
         """
-        Remove background and replace with solid color in one step
+        Remove background and replace with solid color
         
         Args:
             img_bgr: Input BGR image
@@ -159,7 +153,7 @@ class BackgroundRemover:
         if use_professional_composite:
             result = self.professional_composite(img_rgba, bg_color)
         else:
-            # Simple alpha blending
+            # alpha blending
             alpha = img_rgba[:, :, 3:4].astype(float) / 255.0
             foreground = img_rgba[:, :, :3].astype(float)
             background = np.full(
@@ -227,4 +221,4 @@ if __name__ == "__main__":
     cv2.imwrite("test_grey_bg.png", img_grey)
     print(f"Saved grey background to test_grey_bg.png")
     
-    print("\n✅ All tests completed successfully!")
+    print("\n All tests completed successfully!")

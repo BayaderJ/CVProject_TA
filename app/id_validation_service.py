@@ -1,6 +1,5 @@
 """
 ID Photo Validation Service - Using OpenCV DNN Face Detector
-Replaces RetinaFace to avoid TensorFlow conflicts
 """
 
 import cv2
@@ -15,7 +14,7 @@ from tensorflow import keras
 class IDPhotoValidator:
     """
     Validates ID photo requirements for Saudi ID photos
-    Uses OpenCV DNN face detector instead of RetinaFace
+    Uses OpenCV DNN face detector
     """
     
     def __init__(self, models_dir: str = "app/models"):
@@ -23,24 +22,24 @@ class IDPhotoValidator:
         Initialize the validator
         
         Args:
-            models_dir: Directory containing the .keras model files
+            models_dir: Directory containing the model files
         """
         self.models_dir = Path(models_dir)
         
         print("[ID VALIDATOR] Loading validation models...")
         
-        # Load the three .keras models
+        # Loading the three  models
         self.glasses_model = self._load_keras_model("glasses")
         self.female_model = self._load_keras_model("female")
         self.male_model = self._load_keras_model("male")
         
-        print("[ID VALIDATOR] All models loaded successfully")
+        print("[ID VALIDATOR] All models loaded successfully")#debugging
         
         # Initialize OpenCV face detector
         self._initialize_opencv_detector()
         
         # Thresholds
-        self.glasses_threshold = 0.52
+        self.glasses_threshold = 0.35
         self.hijab_threshold = 0.5
         self.ghutra_threshold = 0.5
         
@@ -48,20 +47,15 @@ class IDPhotoValidator:
         self.img_size = (224, 224)
     
     def _initialize_opencv_detector(self):
-        """
-        Initialize OpenCV DNN face detector
-        Uses pre-trained models that come with OpenCV
-        """
+        
         try:
             print("[ID VALIDATOR] Initializing OpenCV face detector...")
             
-            # Try to use OpenCV's DNN face detector (Caffe model)
-            # These are lightweight and don't conflict with TensorFlow
             self.face_detector = cv2.CascadeClassifier(
                 cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
             )
             
-            # Also load eye detector for landmark detection
+            # loading eye detector for landmark detection
             self.eye_detector = cv2.CascadeClassifier(
                 cv2.data.haarcascades + 'haarcascade_eye.xml'
             )
@@ -74,9 +68,7 @@ class IDPhotoValidator:
             self.eye_detector = None
     
     def _load_keras_model(self, model_type: str) -> keras.Model:
-        """
-        Load a complete .keras model file
-        """
+
         model_path = self.models_dir / f"{model_type}_model.keras"
         
         if not model_path.exists():
@@ -100,9 +92,7 @@ class IDPhotoValidator:
                 raise RuntimeError(f"Failed to load {model_type} model: {str(e)}\n{str(e2)}")
     
     def _predict_single(self, model: keras.Model, img_bgr: np.ndarray) -> float:
-        """
-        Run prediction on a single image with manual preprocessing
-        """
+
         img_resized = cv2.resize(img_bgr, self.img_size, interpolation=cv2.INTER_AREA)
         img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
         img_float = img_rgb.astype(np.float32)
@@ -145,12 +135,12 @@ class IDPhotoValidator:
         if len(faces) == 0:
             return None, None
         
-        # Get largest face
+        # Getting largest face
         areas = [w * h for (x, y, w, h) in faces]
         best_idx = np.argmax(areas)
         x, y, w, h = faces[best_idx]
         
-        # Convert to [x1, y1, x2, y2] format
+        # Converting to [x1, y1, x2, y2] format
         facial_area = [x, y, x + w, y + h]
         
         # Detect eyes within face region for landmarks
@@ -223,9 +213,7 @@ class IDPhotoValidator:
         errors = []
         warnings = []
         
-        # ===========================================
-        # STEP 1: GLASSES DETECTION (WARNING ONLY)
-        # ===========================================
+        # STEP 1: Glasses detection (will show warning only)
         try:
             print(f"[VALIDATOR] Checking for glasses...")
             glasses_prob = self._predict_single(self.glasses_model, img_bgr)
@@ -242,9 +230,8 @@ class IDPhotoValidator:
             glasses_prob = 0.0
             warnings.append("Glasses detection unavailable")
         
-        # ===========================================
-        # STEP 2: HEAD COVER DETECTION (BLOCKING)
-        # ===========================================
+        
+        # STEP 2: Hijab/Shemag detection (will block the flow)
         try:
             if gender.lower() == "female":
                 print(f"[VALIDATOR] Checking for hijab...")
@@ -283,9 +270,8 @@ class IDPhotoValidator:
             headcover_prob = 0.0
             headcover_type = "unknown"
         
-        # ===========================================
-        # STEP 3: FACE DETECTION (OpenCV)
-        # ===========================================
+        
+        # STEP 3: Face detection
         try:
             print(f"[VALIDATOR] Running OpenCV face detection...")
             print(f"[VALIDATOR] Image shape: {img_bgr.shape}, dtype: {img_bgr.dtype}")
@@ -330,9 +316,7 @@ class IDPhotoValidator:
             facial_area = None
             head_tilt = 0
         
-        # ===========================================
-        # RETURN VALIDATION RESULTS
-        # ===========================================
+        # Returning validation results
         valid = len(errors) == 0
         
         result = {
@@ -351,9 +335,9 @@ class IDPhotoValidator:
         }
         
         if valid:
-            print(f"[VALIDATOR] ✅ Validation passed")
+            print(f"[VALIDATOR]  Validation passed")
         else:
-            print(f"[VALIDATOR] ❌ Validation failed: {len(errors)} error(s)")
+            print(f"[VALIDATOR]  Validation failed: {len(errors)} error(s)")
         
         return result
 

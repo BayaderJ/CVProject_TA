@@ -9,7 +9,7 @@ To run the project:
    
     python -m venv venv
 
-    venv\Scripts\activate 
+    venv\Scripts\activate
 
     pip install -r requirements.txt
 
