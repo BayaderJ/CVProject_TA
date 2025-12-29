@@ -261,6 +261,7 @@
       color: #e65100;
       margin: 5px 0;
     }
+<<<<<<< HEAD
 
     /*  LLM Report Styles */
     .report-box {
@@ -352,6 +353,8 @@
       background: #4caf50;
       color: white;
     }
+=======
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
   </style>
 </head>
 <body>
@@ -373,7 +376,11 @@
       </div>
     </div>
 
+<<<<<<< HEAD
     <!--Choosing Background Color (only for professional pic) -->
+=======
+    <!-- Step 2a: Choose Background Color (only for professional) -->
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     <div id="step2" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Choose Background Color</h2>
       <div class="color-options">
@@ -387,16 +394,28 @@
       </div>
     </div>
 
+<<<<<<< HEAD
     <!--Choosing Gender (only for Saudi ID) -->
+=======
+    <!-- Step 2b: Choose Gender (only for Saudi ID) -->
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     <div id="step2b" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Select Gender</h2>
       <div class="option-grid">
         <div class="option-card gender-card" data-gender="male">
+<<<<<<< HEAD
           <h3>Male</h3>
           <p>Requires Saudi Attire</p>
         </div>
         <div class="option-card gender-card" data-gender="female">
           <h3>Female</h3>
+=======
+          <h3> Male</h3>
+          <p>Requires Saudi Attire </p>
+        </div>
+        <div class="option-card gender-card" data-gender="female">
+          <h3> Female</h3>
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
           <p>Requires Hijab</p>
         </div>
       </div>
@@ -405,7 +424,11 @@
       </div>
     </div>
 
+<<<<<<< HEAD
     <!--Uploading or Capturing a photo -->
+=======
+    <!-- Step 3: Upload or Capture Photo -->
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     <div id="step3" class="step">
       <h2 style="text-align: center; margin-bottom: 20px;">Upload or Capture Photo</h2>
       <div class="upload-section">
@@ -424,7 +447,7 @@
       <div id="videoContainer">
         <video id="video" autoplay></video>
         <br>
-        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;">📸 Capture</button>
+        <button class="upload-btn" onclick="capturePhoto()" style="margin-top: 10px;"> Capture</button>
         <button class="btn btn-secondary" onclick="stopCamera()" style="margin-top: 10px;">✖ Cancel</button>
       </div>
 
@@ -458,13 +481,20 @@
 
       <div id="resultSection" class="preview-section hidden">
         
+<<<<<<< HEAD
         <!--Warnings section (if any) -->
+=======
+        <!-- Warnings section (if any) -->
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
         <div id="warningsBox" class="warning-box hidden">
           <p><strong>⚠️ Warnings:</strong></p>
           <div id="warningsList"></div>
         </div>
         
+<<<<<<< HEAD
         <!--Image first -->
+=======
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
         <img id="resultImg" alt="Result">
 
         <!--LLM Report Section-->
@@ -482,8 +512,13 @@
         
         <!--Buttons at the bottom -->
         <div style="margin-top: 20px;">
+<<<<<<< HEAD
           <button class="upload-btn" onclick="downloadImage()">💾 Download</button>
           <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;">🔄 Start Over</button>
+=======
+          <button class="upload-btn" onclick="downloadImage()"> Download</button>
+          <button class="btn btn-secondary" onclick="startOver()" style="margin-left: 10px;"> Start Over</button>
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
         </div>
       </div>
     </div>
@@ -496,9 +531,14 @@
     let capturedFile = null;
     let stream = null;
     let resultBlob = null;
+<<<<<<< HEAD
     let processingStepsVisible = false;
 
     //Choosing photo type
+=======
+
+    // Step 1: Choose photo type
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     document.querySelectorAll('.option-card[data-type]').forEach(card => {
       card.addEventListener('click', function() {
         document.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
@@ -514,7 +554,11 @@
       });
     });
 
+<<<<<<< HEAD
     //Choosing gender
+=======
+    // Step 2b: Choose gender
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     document.querySelectorAll('.gender-card').forEach(card => {
       card.addEventListener('click', function() {
         document.querySelectorAll('.gender-card').forEach(c => c.classList.remove('selected'));
@@ -524,7 +568,11 @@
       });
     });
 
+<<<<<<< HEAD
     //Choosing background color
+=======
+    // Step 2: Choose background color
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     document.querySelectorAll('.color-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
@@ -539,6 +587,7 @@
       if (e.target.files.length > 0) {
         const originalFile = e.target.files[0];
         
+<<<<<<< HEAD
         //Debug: Check file size
         console.log('📁 File selected:', originalFile.name);
         console.log('📊 Size:', originalFile.size, 'bytes', '(', (originalFile.size / 1024).toFixed(2), 'KB)');
@@ -549,6 +598,18 @@
         }
         
         //Check actual image dimensions
+=======
+        // Debug: Check file size
+        console.log(' File selected:', originalFile.name);
+        console.log(' Size:', originalFile.size, 'bytes', '(', (originalFile.size / 1024).toFixed(2), 'KB)');
+        
+        // Validate file isn't too small
+        if (originalFile.size < 50000) {  // Less than 50KB is suspicious
+          console.warn('⚠️ File is very small! Might be thumbnail or heavily compressed.');
+        }
+        
+        // Check actual image dimensions
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
         const img = new Image();
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -563,6 +624,10 @@
         };
         reader.readAsDataURL(originalFile);
         
+<<<<<<< HEAD
+=======
+        // Store the ORIGINAL file - don't modify it!
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
         capturedFile = originalFile;
         showPreview(originalFile);
       }
@@ -581,6 +646,19 @@
       }
     }
 
+<<<<<<< HEAD
+=======
+    function updateSelectedOptionsInfo() {
+      let info = `Photo Type: ${photoType === 'professional' ? 'Professional Photo' : 'Saudi ID'}`;
+      if (photoType === 'professional') {
+        info += ` | Background: ${backgroundColor.charAt(0).toUpperCase() + backgroundColor.slice(1)}`;
+      } else {
+        info += ` | Gender: ${gender.charAt(0).toUpperCase() + gender.slice(1)} | Background: White`;
+      }
+      document.getElementById('selectedOptionsInfo').textContent = info;
+    }
+
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
     async function startCamera() {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
@@ -629,13 +707,21 @@
         return;
       }
 
+<<<<<<< HEAD
       //DEBUG: Check what is actually being send
+=======
+      // 🐛 DEBUG: Check what we're actually sending
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
       console.log('=== DEBUG FILE INFO ===');
       console.log('File name:', capturedFile.name);
       console.log('File size:', capturedFile.size, 'bytes');
       console.log('File type:', capturedFile.type);
       
+<<<<<<< HEAD
       //Create a temporary image to check dimensions
+=======
+      // Create a temporary image to check dimensions
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
       const tempImg = new Image();
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -651,7 +737,11 @@
       reader.readAsDataURL(capturedFile);
       // End of debug check
 
+<<<<<<< HEAD
       // processing screen
+=======
+      // Go to processing screen
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
       goToStep(4);
       document.getElementById('loadingDiv').classList.add('active');
       document.getElementById('errorSection').classList.add('hidden');
@@ -690,7 +780,11 @@
             const error = await response.json();
             errorMessage = error.error || 'Processing failed';
             
+<<<<<<< HEAD
             //Displaying validation errors
+=======
+            // Show validation errors if present
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
             if (error.validation) {
               if (error.validation.errors && error.validation.errors.length > 0) {
                 errorMessage = error.validation.errors.join('\n');
@@ -704,6 +798,7 @@
           throw new Error(errorMessage);
         }
 
+<<<<<<< HEAD
         // Parse JSON response
         const data = await response.json();
         console.log('Received JSON response:', {
@@ -755,6 +850,36 @@
         }
 
         //Show result
+=======
+        // Get the image blob
+        const blob = await response.blob();
+        console.log('Received blob:', blob.size, 'bytes', blob.type);
+        
+        if (blob.size === 0) {
+          throw new Error('Received empty image');
+        }
+
+        // Store blob for download
+        resultBlob = blob;
+
+        // Create URL for display
+        const url = URL.createObjectURL(blob);
+        
+        // Check for warnings in response headers
+        const warningsHeader = response.headers.get('x-warnings');
+        if (warningsHeader) {
+          try {
+            const warnings = JSON.parse(warningsHeader);
+            if (warnings && warnings.length > 0) {
+              displayWarnings(warnings);
+            }
+          } catch (e) {
+            console.log('Could not parse warnings:', e);
+          }
+        }
+
+        // Show result
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
         document.getElementById('loadingDiv').classList.remove('active');
         document.getElementById('resultSection').classList.remove('hidden');
         
@@ -765,6 +890,7 @@
         document.getElementById('loadingDiv').classList.remove('active');
         document.getElementById('errorMessage').textContent = error.message;
         document.getElementById('errorSection').classList.remove('hidden');
+<<<<<<< HEAD
       }
     }
 
@@ -794,7 +920,23 @@
       } else {
         stepsSection.classList.add('hidden');
         toggleText.textContent = 'عرض خطوات المعالجة التفصيلية';
+=======
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
       }
+    }
+
+    function displayWarnings(warnings) {
+      const warningsBox = document.getElementById('warningsBox');
+      const warningsList = document.getElementById('warningsList');
+      
+      warningsList.innerHTML = '';
+      warnings.forEach(warning => {
+        const p = document.createElement('p');
+        p.textContent = '• ' + warning;
+        warningsList.appendChild(p);
+      });
+      
+      warningsBox.classList.remove('hidden');
     }
 
     function downloadImage() {
@@ -821,14 +963,20 @@
       gender = '';
       capturedFile = null;
       resultBlob = null;
+<<<<<<< HEAD
       processingStepsVisible = false;
+=======
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
       document.getElementById('fileInput').value = '';
       document.getElementById('previewSection').classList.add('hidden');
       document.getElementById('resultSection').classList.add('hidden');
       document.getElementById('errorSection').classList.add('hidden');
       document.getElementById('warningsBox').classList.add('hidden');
+<<<<<<< HEAD
       document.getElementById('reportSection').classList.add('hidden');
       document.getElementById('processingStepsSection').classList.add('hidden');
+=======
+>>>>>>> 8a866c891818bd553116e8e1b0ca8ca1707b7966
       document.getElementById('loadingDiv').classList.add('active');
       document.querySelectorAll('.option-card, .color-btn').forEach(el => el.classList.remove('selected'));
       goToStep(1);
